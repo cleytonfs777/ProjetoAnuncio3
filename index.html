@@ -1,0 +1,568 @@
+﻿<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BM CONTROL - V5</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="css/style.css" rel="stylesheet">
+</head>
+<body class="bg-slate-100 flex h-screen overflow-hidden text-slate-800 font-sans">
+
+    <!-- Login Overlay -->
+    <div id="loginOverlay" class="fixed inset-0 z-[100] bg-slate-900 flex items-center justify-center">
+        <div class="bg-white p-8 rounded-2xl shadow-2xl w-full max-w-md">
+            <div class="text-center mb-8">
+                <h1 class="text-3xl font-black text-indigo-900 tracking-tighter mb-2">BM CONTROL</h1>
+                <p class="text-slate-500">Sistema de Gestão de Escala</p>
+            </div>
+            <form id="loginForm" class="space-y-4" onsubmit="handleLogin(event)">
+                <div>
+                    <label class="block text-sm font-bold text-slate-700 mb-1">Usuário</label>
+                    <input type="text" id="loginUser" class="w-full border rounded-lg p-3 focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="Digite seu usuário..." required>
+                </div>
+                <div>
+                    <label class="block text-sm font-bold text-slate-700 mb-1">Senha</label>
+                    <input type="password" id="loginPass" class="w-full border rounded-lg p-3 focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="••••••••" required>
+                </div>
+                <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-lg shadow-lg transition transform active:scale-95">
+                    Entrar no Sistema
+                </button>
+                <div id="loginError" class="text-red-500 text-sm font-bold text-center mt-2 hidden"></div>
+            </form>
+            <div class="mt-6 text-center text-xs text-slate-400">
+                <p>Acesso restrito a pessoal autorizado</p>
+            </div>
+        </div>
+    </div>
+
+    <aside class="w-64 bg-slate-900 text-white flex flex-col shrink-0 shadow-xl z-50 transition-all duration-300" id="sidebar">
+        <div class="p-6 text-2xl font-bold border-b border-slate-800 flex items-center gap-3 bg-slate-950 truncate">
+            <span class="tracking-tighter bg-gradient-to-r from-blue-400 to-indigo-400 bg-clip-text text-transparent">BM CONTROL</span>
+        </div>
+        <nav class="flex-1 mt-6 text-sm font-medium">
+            <a href="#" onclick="showTab('escala')" class="flex items-center p-4 hover:bg-slate-800 transition-all duration-200 active-link border-l-4 border-transparent" id="link-escala">
+                <i class="fas fa-calendar-alt mr-3 w-5 text-blue-400"></i> ESCALA DE SERVIÇO
+            </a>
+            <a href="#" onclick="showTab('horas-extras')" class="flex items-center p-4 hover:bg-slate-800 transition-all duration-200 border-l-4 border-transparent" id="link-horas-extras">
+                <i class="fas fa-stopwatch mr-3 w-5 text-red-400"></i> HORAS EXTRAS
+            </a>
+            <a href="#" onclick="showTab('glossario')" class="flex items-center p-4 hover:bg-slate-800 transition-all duration-200 border-l-4 border-transparent" id="link-glossario">
+                <i class="fas fa-book mr-3 w-5 text-emerald-400"></i> LEGENDA & HORAS
+            </a>
+            <a href="#" onclick="showTab('config')" class="flex items-center p-4 hover:bg-slate-800 transition-all duration-200 mt-2 border-t border-slate-800 border-l-4 border-transparent role-restricted" id="link-config">
+                <i class="fas fa-cog mr-3 w-5 text-slate-400"></i> CONFIGURAÇÕES
+            </a>
+        </nav>
+        <div class="p-4 border-t border-slate-800 bg-slate-950">
+             <div class="flex items-center gap-3">
+                <div class="w-8 h-8 rounded-full bg-indigo-500 flex items-center justify-center font-bold text-xs" id="userAvatar">A</div>
+                <div class="flex-1 overflow-hidden">
+                    <div class="text-xs font-bold truncate" id="userNameDisplay">Usuário</div>
+                    <div class="text-[10px] text-slate-400 truncate" id="userRoleDisplay">ADMIN</div>
+                </div>
+                <div class="flex flex-col gap-1">
+                    <button onclick="openModalChangePass()" class="text-slate-400 hover:text-white" title="Alterar Senha"><i class="fas fa-key text-[10px]"></i></button>
+                    <button onclick="logout()" class="text-slate-400 hover:text-white" title="Sair"><i class="fas fa-sign-out-alt text-[10px]"></i></button>
+                </div>
+             </div>
+        </div>
+    </aside>
+
+    <!-- Modal Change Password -->
+    <div id="modalChangePass" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[80] hidden flex items-center justify-center opacity-0 transition-opacity duration-300">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-sm transform scale-95 transition-transform duration-300 flex flex-col">
+            <div class="p-5 border-b flex justify-between items-center">
+                <h3 class="font-bold text-slate-700">Alterar Senha</h3>
+                <button onclick="closeModalChangePass()" class="text-slate-400 hover:text-red-500"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="p-6 space-y-4">
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Senha Atual</label>
+                    <input type="password" id="inputOldPass" class="w-full border rounded-lg p-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Nova Senha</label>
+                    <input type="password" id="inputNewPass" class="w-full border rounded-lg p-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Confirmar Nova Senha</label>
+                    <input type="password" id="inputConfirmPass" class="w-full border rounded-lg p-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
+                </div>
+            </div>
+            <div class="p-4 bg-slate-50 rounded-b-2xl flex justify-end gap-2">
+                <button onclick="closeModalChangePass()" class="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-200 rounded-lg">Cancelar</button>
+                <button onclick="saveNewPassword()" class="px-4 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg shadow">Alterar</button>
+            </div>
+        </div>
+    </div>
+
+    <main class="flex-1 flex flex-col relative bg-slate-50">
+        
+        <!-- Modal Legenda -->
+        <div id="modalLegenda" class="modal-overlay">
+            <div class="modal-content">
+                <div class="p-6 border-b flex justify-between items-center bg-indigo-50 rounded-t-xl">
+                    <h3 class="font-bold text-lg text-indigo-900" id="modalTitleLegenda">Nova Legenda</h3>
+                    <button onclick="closeModalLegenda()" class="text-indigo-400 hover:text-indigo-600"><i class="fas fa-times"></i></button>
+                </div>
+                <div class="p-6 space-y-4">
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-xs font-bold text-slate-500 mb-1 uppercase">Sigla (Código)</label>
+                            <input type="text" id="inputSigla" class="w-full border rounded-lg p-2.5 font-bold uppercase text-center focus:ring-2 focus:ring-indigo-500 outline-none" maxlength="3">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-slate-500 mb-1 uppercase">Horas (Decimal)</label>
+                            <input type="number" id="inputHoras" step="0.1" class="w-full border rounded-lg p-2.5 font-bold text-right focus:ring-2 focus:ring-indigo-500 outline-none">
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-500 mb-1 uppercase">Descrição Completa</label>
+                        <input type="text" id="inputDesc" class="w-full border rounded-lg p-2.5 focus:ring-2 focus:ring-indigo-500 outline-none">
+                    </div>
+                    
+                    <div class="pt-2 border-t mt-2">
+                        <span class="block text-xs font-bold text-slate-400 mb-3 uppercase">Personalização de Cores</span>
+                        <div class="grid grid-cols-2 gap-4">
+                            <div class="bg-slate-50 p-3 rounded-lg border flex items-center justify-between">
+                                <label class="text-xs font-bold text-slate-600">Cor de Fundo</label>
+                                <input type="color" id="inputColorBg" class="w-8 h-8 rounded cursor-pointer border-none p-0 bg-transparent">
+                            </div>
+                            <div class="bg-slate-50 p-3 rounded-lg border flex items-center justify-between">
+                                <label class="text-xs font-bold text-slate-600">Cor do Texto</label>
+                                <input type="color" id="inputColorText" class="w-8 h-8 rounded cursor-pointer border-none p-0 bg-transparent">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Preview -->
+                    <div class="bg-white border rounded-lg p-4 flex items-center justify-center gap-4">
+                        <div class="text-xs font-bold text-slate-400 uppercase">Pré-visualização:</div>
+                        <div id="previewLegenda" class="w-12 h-12 rounded-lg border flex items-center justify-center font-bold text-xl shadow-sm">
+                            SG
+                        </div>
+                    </div>
+                </div>
+                <div class="p-6 border-t bg-slate-50 rounded-b-xl flex justify-end gap-3">
+                    <button onclick="closeModalLegenda()" class="px-4 py-2 text-slate-600 font-bold hover:bg-slate-200 rounded-lg transition">Cancelar</button>
+                    <button onclick="saveLegenda()" class="px-6 py-2 bg-indigo-600 text-white font-bold rounded-lg hover:bg-indigo-700 shadow-lg transition transform active:scale-95">Salvar Legenda</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Modal Seção -->
+        <div id="modalSecao" class="modal-overlay">
+            <div class="modal-content">
+                <div class="p-6 border-b flex justify-between items-center bg-emerald-50 rounded-t-xl">
+                    <h3 class="font-bold text-lg text-emerald-900" id="modalTitleSecao">Nova Seção</h3>
+                    <button onclick="closeModalSecao()" class="text-emerald-400 hover:text-emerald-600"><i class="fas fa-times"></i></button>
+                </div>
+                <div class="p-6 space-y-4">
+                    <div>
+                        <label class="block text-sm font-bold text-gray-700 mb-1">Sigla</label>
+                        <input type="text" id="inputSiglaSecao" class="w-full border rounded-lg p-2.5 focus:ring-2 focus:ring-emerald-500 outline-none uppercase" maxlength="10">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-bold text-gray-700 mb-1">Nome/Descrição</label>
+                        <input type="text" id="inputDescSecao" class="w-full border rounded-lg p-2.5 focus:ring-2 focus:ring-emerald-500 outline-none">
+                    </div>
+                </div>
+                <div class="p-6 border-t bg-slate-50 rounded-b-xl flex justify-end gap-3">
+                    <button onclick="closeModalSecao()" class="px-4 py-2 text-slate-600 font-bold hover:bg-slate-200 rounded-lg transition">Cancelar</button>
+                    <button onclick="saveSecao()" class="px-6 py-2 bg-emerald-600 text-white font-bold rounded-lg hover:bg-emerald-700 shadow-lg transition transform active:scale-95">Salvar</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Modal Militar -->
+        <div id="modalMilitar" class="modal-overlay">
+            <div class="modal-content">
+                <div class="p-6 border-b flex justify-between items-center">
+                    <h3 class="font-bold text-lg" id="modalTitle">Novo Militar</h3>
+                    <button onclick="closeModalMilitar()" class="text-gray-400 hover:text-gray-600"><i class="fas fa-times"></i></button>
+                </div>
+                <div class="p-6 space-y-4">
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-bold text-gray-700 mb-1">Posto/Grad</label>
+                            <select id="inputPosto" class="w-full border rounded-lg p-2.5 bg-white focus:ring-2 focus:ring-indigo-500 outline-none">
+                                <option value="" disabled selected>Selecione...</option>
+                                <option value="Ten-Cel">Ten-Cel</option>
+                                <option value="Maj">Maj</option>
+                                <option value="Cap">Cap</option>
+                                <option value="1º Ten">1º Ten</option>
+                                <option value="2º Ten">2º Ten</option>
+                                <option value="Sub Ten">Sub Ten</option>
+                                <option value="1º Sgt">1º Sgt</option>
+                                <option value="2º Sgt">2º Sgt</option>
+                                <option value="3º Sgt">3º Sgt</option>
+                                <option value="Cb">Cb</option>
+                                <option value="Sd">Sd</option>
+                                <option value="Sd 2ª Cl">Sd 2ª Cl</option>
+                                <option value="Civil">Civil</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-bold text-gray-700 mb-1">Carga Horária</label>
+                            <select id="inputTypeHora" class="w-full border rounded-lg p-2.5 bg-white focus:ring-2 focus:ring-indigo-500 outline-none">
+                                <option value="" disabled selected>Selecione...</option>
+                                <option value="6h">6h</option>
+                                <option value="8h">8h</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-bold text-gray-700 mb-1">Nome Completo</label>
+                        <input type="text" id="inputNome" class="w-full border rounded-lg p-2.5 focus:ring-2 focus:ring-indigo-500 outline-none">
+                    </div>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-bold text-gray-700 mb-1">Matrícula</label>
+                            <input type="text" id="inputNum" class="w-full border rounded-lg p-2.5 focus:ring-2 focus:ring-indigo-500 outline-none">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-bold text-gray-700 mb-1">Seção</label>
+                            <select id="inputSecao" class="w-full border rounded-lg p-2.5 bg-white focus:ring-2 focus:ring-indigo-500 outline-none">
+                                <!-- Populated by JS -->
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="mt-6 pt-6 border-t border-slate-100">
+                        <div class="flex items-center justify-between mb-4">
+                            <label class="flex items-center gap-2 cursor-pointer">
+                                <input type="checkbox" id="chkAcessoSistema" class="w-5 h-5 accent-indigo-600 rounded" onchange="toggleAccessFields()">
+                                <span class="text-sm font-bold text-slate-700">Conceder Acesso ao Sistema?</span>
+                            </label>
+                        </div>
+                        
+                        <div id="accessFields" class="grid grid-cols-1 md:grid-cols-2 gap-4 hidden bg-slate-50 p-4 rounded-lg border border-slate-200">
+                            <div>
+                                <label class="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1">Perfil</label>
+                                <select id="inputMilitarRole" class="w-full border-slate-300 rounded-lg p-3 bg-white focus:ring-2 focus:ring-indigo-500 outline-none font-bold text-slate-700 text-xs">
+                                    <option value="USUARIO">USUARIO (Visualizar)</option>
+                                    <option value="GERENTE">GERENTE (Editar Escala)</option>
+                                    <option value="ADMIN">ADMIN (Total)</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1">Senha</label>
+                                <input type="password" id="inputMilitarPass" class="w-full border-slate-300 rounded-lg p-3 bg-white focus:ring-2 focus:ring-indigo-500 outline-none placeholder:text-slate-400 text-xs" placeholder="Nova Senha...">
+                            </div>
+                            <div class="col-span-full text-[10px] text-slate-400">
+                                * O usuário de login será o <strong>Nº de Matrícula</strong> (apenas números).
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="p-6 border-t bg-gray-50 rounded-b-xl flex justify-end gap-3">
+                    <button onclick="closeModalMilitar()" class="px-4 py-2 text-gray-600 font-bold hover:bg-gray-200 rounded-lg transition">Cancelar</button>
+                    <button onclick="saveMilitar()" class="px-6 py-2 bg-indigo-600 text-white font-bold rounded-lg hover:bg-indigo-700 shadow-lg transition transform active:scale-95">Salvar</button>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- Modal Usuario -->
+        <div id="modalUsuario" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[70] hidden flex items-center justify-center opacity-0 transition-opacity duration-300">
+            <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg transform scale-95 transition-transform duration-300 flex flex-col max-h-[90vh]">
+                <div class="p-6 border-b flex justify-between items-center bg-gradient-to-r from-gray-50 to-white rounded-t-2xl">
+                    <h3 class="text-xl font-black text-gray-800 flex items-center gap-2">
+                        <i class="fas fa-user-shield text-purple-600"></i> <span id="modalTitleUsuario">Novo Usuário</span>
+                    </h3>
+                    <button onclick="closeModalUsuario()" class="text-gray-400 hover:text-red-500 transition-colors w-8 h-8 flex items-center justify-center rounded-full hover:bg-red-50">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <div class="p-6 space-y-5 overflow-y-auto">
+                    <div class="grid grid-cols-1 gap-4">
+                        <div>
+                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">Nome Completo</label>
+                            <input type="text" id="inputNomeUser" class="w-full border-gray-300 rounded-lg p-3 bg-gray-50 focus:bg-white focus:ring-2 focus:ring-purple-500 focus:border-purple-500 outline-none transition-all placeholder:text-gray-400 font-medium" placeholder="Ex: Sd Fulano">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">Usuário (Login)</label>
+                            <input type="text" id="inputLoginUser" class="w-full border-gray-300 rounded-lg p-3 bg-gray-50 focus:bg-white focus:ring-2 focus:ring-purple-500 focus:border-purple-500 outline-none transition-all font-medium">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">Senha</label>
+                            <input type="text" id="inputPassUser" class="w-full border-gray-300 rounded-lg p-3 bg-gray-50 focus:bg-white focus:ring-2 focus:ring-purple-500 focus:border-purple-500 outline-none transition-all font-medium" placeholder="Senha inicial">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">Perfil de Acesso</label>
+                            <select id="inputRoleUser" class="w-full border-gray-300 rounded-lg p-3 bg-gray-50 focus:bg-white focus:ring-2 focus:ring-purple-500 focus:border-purple-500 outline-none transition-all font-bold text-gray-700">
+                                <option value="USUARIO">USUARIO - Visualizador</option>
+                                <option value="GERENTE">GERENTE - Editor de Escala</option>
+                                <option value="ADMIN">ADMIN - Acesso Total</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                <div class="p-6 border-t bg-gray-50 rounded-b-xl flex justify-end gap-3">
+                    <button onclick="closeModalUsuario()" class="px-4 py-2 text-gray-600 font-bold hover:bg-gray-200 rounded-lg transition">Cancelar</button>
+                    <button onclick="saveUser()" class="px-6 py-2 bg-purple-600 text-white font-bold rounded-lg hover:bg-purple-700 shadow-lg transition transform active:scale-95">Salvar</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tab Escala -->
+        <section id="escala" class="tab-content active flex-col h-full w-full p-4">
+            <div class="flex flex-col md:flex-row justify-between items-center mb-4 bg-white p-4 rounded-xl shadow-sm border border-slate-200 gap-4">
+                <div class="flex items-center gap-3">
+                    <div class="bg-blue-600 text-white p-2 rounded-lg">
+                        <i class="fas fa-table"></i>
+                    </div>
+                    <div>
+                        <h2 class="text-xl font-black text-slate-800 leading-tight">CONTROLE DE FREQUÊNCIA</h2>
+                        <p class="text-xs text-slate-500 font-medium">Gerenciamento de escalas e horas</p>
+                    </div>
+                </div>
+                <div class="flex items-center gap-2 bg-slate-100 p-1 rounded-lg">
+                    <button onclick="changeMonth(-1)" class="w-8 h-8 flex items-center justify-center hover:bg-white rounded shadow-sm text-slate-600"><i class="fas fa-chevron-left"></i></button>
+                    <select id="selMes" onchange="renderEscala()" class="bg-transparent border-none text-sm font-bold w-40 text-center outline-none"></select>
+                    <button onclick="changeMonth(1)" class="w-8 h-8 flex items-center justify-center hover:bg-white rounded shadow-sm text-slate-600"><i class="fas fa-chevron-right"></i></button>
+                </div>
+            </div>
+            
+            <div class="bg-white rounded-xl shadow border border-slate-200 overflow-hidden flex-1 flex flex-col">
+                <div class="p-4 border-b flex gap-4">
+                    <div class="relative flex-1">
+                        <i class="fas fa-search absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"></i>
+                        <input type="text" id="searchInput" oninput="renderEscala()" placeholder="Pesquisar..." class="w-full pl-10 pr-4 py-2 rounded-lg border border-slate-200 focus:ring-2 focus:ring-blue-500 outline-none text-sm">
+                    </div>
+                    <div class="relative w-64 group">
+                        <button class="w-full h-full border rounded-lg px-4 py-2 flex items-center justify-between text-sm text-slate-600 font-bold bg-white hover:bg-slate-50 relative z-20" type="button">
+                            <span>Filtrar Seções</span>
+                            <i class="fas fa-chevron-down text-xs ml-2"></i>
+                        </button>
+                        <div id="filterSecoesContainer" class="hidden absolute top-full right-0 mt-2 w-64 bg-white border border-slate-200 shadow-xl rounded-lg p-3 z-50 transition-all max-h-60 overflow-y-auto">
+                            <!-- Populated by JS -->
+                        </div>
+                    </div>
+                </div>
+                <div class="overflow-auto flex-1">
+                    <table class="w-full border-collapse text-[11px] whitespace-nowrap">
+                        <thead id="headEscala" class="bg-slate-50 sticky top-0 shadow-sm z-40 h-10"></thead>
+                        <tbody id="bodyEscala" class="divide-y divide-slate-100"></tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- Tab Horas Extras -->
+        <section id="horas-extras" class="tab-content flex-col h-full w-full p-4">
+            <div class="flex flex-col md:flex-row justify-between items-center mb-4 bg-white p-4 rounded-xl shadow-sm border border-slate-200 gap-4">
+                <div class="flex items-center gap-3">
+                    <div class="bg-red-600 text-white p-2 rounded-lg">
+                        <i class="fas fa-stopwatch"></i>
+                    </div>
+                    <div>
+                        <h2 class="text-xl font-black text-slate-800 leading-tight">CONTROLE DE HORAS EXTRAS</h2>
+                        <p class="text-xs text-slate-500 font-medium">Bancos de horas e compensações</p>
+                    </div>
+                </div>
+                <div class="flex items-center gap-2 bg-slate-100 p-1 rounded-lg">
+                    <button onclick="changeMonth(-1)" class="w-8 h-8 flex items-center justify-center hover:bg-white rounded shadow-sm text-slate-600"><i class="fas fa-chevron-left"></i></button>
+                    <!-- Uses same select ID, will be synced via JS or moved to common area? Problem: IDs must be unique -->
+                    <!-- We can reuse 'selMes' if it's visible. But tab content hides/shows.
+                         Actually, 'selMes' is inside '#escala'. We need a new selector for this tab or move selector to a global header?
+                         Let's create a new one 'selMesExtras' for simplicity and sync them or separate them.
+                         For now, separate independent selector.
+                    -->
+                    <select id="selMesExtras" onchange="renderHorasExtras()" class="bg-transparent border-none text-sm font-bold w-40 text-center outline-none"></select>
+                    <button onclick="changeMonth(1)" class="w-8 h-8 flex items-center justify-center hover:bg-white rounded shadow-sm text-slate-600"><i class="fas fa-chevron-right"></i></button>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-xl shadow border border-slate-200 overflow-hidden flex-1 flex flex-col">
+                <div class="p-4 border-b">
+                     <div class="relative">
+                        <i class="fas fa-search absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"></i>
+                         <!-- New ID searchInputExtras -->
+                        <input type="text" id="searchInputExtras" oninput="renderHorasExtras()" placeholder="Pesquisar..." class="w-full pl-10 pr-4 py-2 rounded-lg border border-slate-200 focus:ring-2 focus:ring-red-500 outline-none text-sm">
+                    </div>
+                </div>
+                <div class="overflow-auto flex-1">
+                    <table class="w-full border-collapse text-[11px] whitespace-nowrap">
+                        <thead id="headHorasExtras" class="bg-slate-50 sticky top-0 shadow-sm z-40 h-10"></thead>
+                        <tbody id="bodyHorasExtras" class="divide-y divide-slate-100"></tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- Tab Glossario -->
+        <section id="glossario" class="tab-content flex-col h-full w-full p-8 overflow-y-auto">
+            <div class="max-w-4xl mx-auto w-full">
+                <div class="flex items-center gap-3 mb-8 pb-4 border-b">
+                    <div class="bg-emerald-600 text-white p-3 rounded-xl">
+                        <i class="fas fa-clock fa-lg"></i>
+                    </div>
+                    <h2 class="text-3xl font-bold text-slate-800">Legendas e Carga Horária</h2>
+                </div>
+                <div id="gridGlossario" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"></div>
+            </div>
+        </section>
+
+        <!-- Tab Config -->
+        <section id="config" class="tab-content flex-col h-full w-full p-8 overflow-y-auto">
+            <div class="max-w-5xl mx-auto w-full space-y-8" id="configContent">
+                
+                <!-- Data Management Header -->
+                 <div class="bg-indigo-900 text-white p-6 rounded-2xl shadow-lg flex justify-between items-center bg-[url('https://www.transparenttextures.com/patterns/dark-matter.png')]">
+                    <div>
+                        <h3 class="text-xl font-bold">Gerenciamento de Dados</h3>
+                        <p class="text-indigo-200 text-sm">Exporte ou importe seus dados para backup (.json)</p>
+                    </div>
+                    <div class="flex gap-3">
+                        <button onclick="downloadDatabase()" class="bg-indigo-500 hover:bg-indigo-400 text-white px-4 py-2 rounded-lg font-bold shadow transition flex items-center gap-2">
+                            <i class="fas fa-database"></i> Salvar Database
+                        </button>
+                    </div>
+                </div>
+
+                <!-- CSV / Excel Import Export Section -->
+                <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex justify-between items-center">
+                    <div>
+                        <h3 class="font-bold text-gray-800">Planilhas de Serviço (Excel/CSV)</h3>
+                        <p class="text-xs text-gray-500">Exporte a grade atual para Excel ou importe dados editados.</p>
+                    </div>
+                    <div class="flex gap-3">
+                        <button onclick="exportCSV()" class="bg-green-600 hover:bg-green-500 text-white px-4 py-2 rounded-lg font-bold shadow transition flex items-center gap-2">
+                            <i class="fas fa-file-csv"></i> Exportar CSV
+                        </button>
+                        <button onclick="triggerImportCSV()" class="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg font-bold shadow transition flex items-center gap-2">
+                            <i class="fas fa-file-upload"></i> Importar CSV
+                        </button>
+                        <input type="file" id="fileInputCSV" class="hidden" accept=".csv">
+                    </div>
+                 </div>
+
+                 <!-- Legendas -->
+                <div class="bg-white p-8 rounded-2xl shadow-sm border border-slate-200">
+                    <div class="flex justify-between items-center mb-6">
+                        <h3 class="text-lg font-bold flex items-center gap-2">
+                            <i class="fas fa-sitemap text-emerald-500"></i>
+                            Gerenciar Seções
+                        </h3>
+                        <button onclick="openModalSecao()" class="text-xs bg-emerald-50 text-emerald-600 px-3 py-1 rounded-full font-bold hover:bg-emerald-100 transition">
+                            + Nova Seção
+                        </button>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-3" id="gridSecoesConfig"></div>
+                </div>
+
+                <!-- Legendas -->
+                <div class="bg-white p-8 rounded-2xl shadow-sm border border-slate-200">
+                    <div class="flex justify-between items-center mb-6">
+                        <h3 class="text-lg font-bold flex items-center gap-2">
+                            <i class="fas fa-palette text-indigo-500"></i>
+                            Personalização de Legendas
+                        </h3>
+                        <button onclick="openModalLegenda()" class="text-xs bg-indigo-50 text-indigo-600 px-3 py-1 rounded-full font-bold hover:bg-indigo-100 transition">
+                            + Nova Legenda
+                        </button>
+                    </div>
+                    <div class="grid grid-cols-1 gap-3" id="gridLegendasConfig"></div>
+                </div>
+
+                <!-- Militares -->
+                <div class="bg-white p-8 rounded-2xl shadow-sm border border-slate-200">
+                    <div class="flex justify-between items-center mb-6">
+                        <h3 class="text-lg font-bold flex items-center gap-2">
+                            <i class="fas fa-users text-blue-500"></i>
+                            Gerenciar Militares da Seção
+                        </h3>
+                        <button onclick="openModalMilitar()" class="text-xs bg-blue-50 text-blue-600 px-3 py-1 rounded-full font-bold hover:bg-blue-100 transition">
+                            + Adicionar Militar
+                        </button>
+                    </div>
+                    <div class="grid grid-cols-1 gap-3" id="listMilitares">
+                        <!-- Populated by JS -->
+                    </div>
+                </div>
+                
+            </div>
+        </section>
+    </main>
+
+    <!-- Modal Hora Extra -->
+    <div id="modalHoraExtra" class="modal-overlay">
+        <div class="modal-content">
+            <div class="p-6 border-b flex justify-between items-center bg-indigo-50 rounded-t-xl">
+                <h3 class="font-bold text-lg text-indigo-900">Editar Hora Extra</h3>
+                <button onclick="closeModalHoraExtra()" class="text-indigo-400 hover:text-indigo-600"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="p-6 space-y-4">
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 mb-1">Quantidade de Horas</label>
+                    <input type="number" step="0.5" id="inputHoraExtraVal" class="w-full border rounded-lg p-3 font-bold text-lg text-center focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="0">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 mb-1">Observação / Justificativa</label>
+                    <textarea id="inputHoraExtraObs" class="w-full border rounded-lg p-3 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" rows="3" placeholder="Digite o motivo aqui..."></textarea>
+                </div>
+                <div class="pt-2 flex justify-end gap-3">
+                    <button onclick="closeModalHoraExtra()" class="px-5 py-2.5 rounded-lg text-slate-600 font-bold text-sm hover:bg-slate-100 transition">Cancelar</button>
+                    <button onclick="saveHoraExtraModal()" class="px-5 py-2.5 rounded-lg bg-indigo-600 text-white font-bold text-sm hover:bg-indigo-700 shadow-lg shadow-indigo-200 transition">Salvar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Gerenciador Carga (Exceções) -->
+    <div id="modalCargaManager" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[70] hidden flex items-center justify-center opacity-0 transition-opacity duration-300">
+        <div class="bg-white rounded-2xl shadow-xl w-full max-w-sm transform scale-95 transition-transform duration-300 p-6">
+            <h3 class="text-lg font-black text-slate-700 mb-4 flex items-center">
+                <i class="fas fa-clock text-blue-600 mr-2"></i> Exceções de Carga Horária
+            </h3>
+            <p class="text-xs text-slate-500 mb-4">Defina um período onde a carga horária será diferente do padrão.</p>
+            
+            <div class="space-y-4">
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Dia Início</label>
+                        <input type="number" id="cargaStart" class="w-full border rounded p-2 text-center font-bold text-slate-700" min="1" max="31">
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Dia Fim</label>
+                        <input type="number" id="cargaEnd" class="w-full border rounded p-2 text-center font-bold text-slate-700" min="1" max="31">
+                    </div>
+                </div>
+                
+                <div>
+                    <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Carga Horária Temporária</label>
+                    <div class="flex gap-2">
+                        <button type="button" onclick="selectCargaModal('6h')" id="btnCarga6h" class="flex-1 py-2 rounded border border-blue-200 bg-blue-50 text-blue-700 font-bold hover:bg-blue-100 transition">6h</button>
+                        <button type="button" onclick="selectCargaModal('8h')" id="btnCarga8h" class="flex-1 py-2 rounded border border-gray-200 text-gray-400 font-bold hover:bg-gray-50 transition">8h</button>
+                    </div>
+                    <input type="hidden" id="inputCargaVal" value="6h">
+                </div>
+            
+                <div class="bg-orange-50 p-3 rounded text-orange-800 text-xs border border-orange-100 flex items-start gap-2">
+                    <i class="fas fa-info-circle mt-0.5"></i>
+                    Isso sobrescreverá a regra padrão apenas para os dias selecionados. Use o botão "Limpar" para remover exceções.
+                </div>
+            
+                <!-- Lista de Exceções -->
+                <div id="listaExcecoesContainer" class="mt-4 border-t pt-3 hidden">
+                    <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-2">Exceções Ativas (Este Mês)</label>
+                    <div id="listaExcecoesContent" class="space-y-1.5 max-h-32 overflow-y-auto pr-1">
+                        <!-- Conteúdo Dinâmico -->
+                    </div>
+                </div>
+            </div>
+
+            <div class="mt-6 flex justify-end gap-2">
+                <button onclick="closeModalCarga()" class="px-3 py-2 text-slate-500 font-bold text-xs hover:bg-slate-100 rounded transition">Cancelar</button>
+                <button onclick="clearCargaPeriod()" class="px-3 py-2 text-red-500 font-bold text-xs hover:bg-red-50 rounded transition">Limpar Período</button>
+                <button onclick="saveCargaPeriod()" class="px-4 py-2 bg-blue-600 text-white font-bold text-xs rounded hover:bg-blue-700 shadow-lg shadow-blue-200 transition">Aplicar</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/script.js"></script>
+</body>
+</html>

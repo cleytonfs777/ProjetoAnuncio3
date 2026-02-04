@@ -1,0 +1,15 @@
+{
+    "secoes": [{"sigla": "S-1", "desc": "RH"}],
+    "militares": [
+        { "id": 1, "num": "123.456", "nome": "Sgt Anderson", "secao": "S-1" },
+        { "id": 2, "num": "987.654", "nome": "Cb Oliveira", "secao": "S-1" },
+        { "id": 3, "num": "456.789", "nome": "Sd Silva", "secao": "S-3" }
+    ],
+    "legendas": [
+        { "sigla": "P", "desc": "Presencial", "color": "#dcfce7", "text": "#166534", "horas": 8.0 },
+        { "sigla": "FO", "desc": "Folga", "color": "#dbeafe", "text": "#1e40af", "horas": 0.0 },
+        { "sigla": "F", "desc": "Férias", "color": "#fef9c3", "text": "#854d0e", "horas": 0.0 },
+        { "sigla": "LM", "desc": "Licença Médica", "color": "#fee2e2", "text": "#991b1b", "horas": 0.0 }
+    ],
+    "escala": {}
+}
