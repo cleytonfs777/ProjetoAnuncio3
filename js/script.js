@@ -4,8 +4,10 @@ const DEFAULT_DB = {
     secoes: [{sigla: "S-1", desc: "RH"}],
     militares: [],
     legendas: [
-        { sigla: "P", desc: "Presencial", color: "#dcfce7", text: "#166534", horas: 8.0 },
-        { sigla: "FO", desc: "Folga", color: "#dbeafe", text: "#1e40af", horas: 0.0 }
+        { sigla: "P", nome: "Presente", desc: "Presença Integral", color: "#dcfce7", text: "#166534", horas: 8.0 },
+        { sigla: "PM", nome: "Presente Manhã", desc: "Turno Matutino", color: "#fef9c3", text: "#854d0e", horas: 6.0 },
+        { sigla: "PT", nome: "Presente Tarde", desc: "Turno Vespertino", color: "#e0f2fe", text: "#0369a1", horas: 6.0 },
+        { sigla: "FO", nome: "Folga", desc: "", color: "#f1f5f9", text: "#475569", horas: 0.0 }
     ],
     escala: {},
     horasExtras: {},
@@ -18,11 +20,31 @@ let currentUser = null;
 
 // Document Ready
 document.addEventListener('DOMContentLoaded', async () => {
-    // Show login overlay by default
-    document.getElementById('loginOverlay').classList.remove('hidden');
-    
     setupEventListeners();
-    // Do NOT load data or render main app until login
+
+    // Check for persisted session
+    const savedUser = localStorage.getItem('currentUser');
+    if (savedUser) {
+        try {
+            currentUser = JSON.parse(savedUser);
+            // Hide Login Overlay
+            document.getElementById('loginOverlay').classList.add('hidden');
+            document.getElementById('loginError').classList.add('hidden');
+            
+            // Apply Permissions
+            applyRolePermissions();
+            
+            // Load Data
+            await loadData();
+        } catch (e) {
+            console.error("Session restore failed", e);
+            localStorage.removeItem('currentUser');
+            document.getElementById('loginOverlay').classList.remove('hidden');
+        }
+    } else {
+        // Show login overlay
+        document.getElementById('loginOverlay').classList.remove('hidden');
+    }
 });
 
 // ------ AUTHENTICATION ------
@@ -50,6 +72,9 @@ async function handleLogin(e) {
                 role: data.user.role 
             };
             
+            // Persist Session
+            localStorage.setItem('currentUser', JSON.stringify(currentUser));
+            
             // Hide Login Overlay
             document.getElementById('loginOverlay').classList.add('hidden');
             errorMsg.classList.add('hidden');
@@ -72,6 +97,7 @@ async function handleLogin(e) {
 
 function logout() {
     currentUser = null;
+    localStorage.removeItem('currentUser');
     document.getElementById('loginOverlay').classList.remove('hidden');
     // Clear forms
     document.getElementById('loginUser').value = '';
@@ -176,6 +202,26 @@ async function loadData() {
             if(!db.escala) db.escala = {};
             if(!db.horasExtras) db.horasExtras = {};
             if(!db.cargasDiarias) db.cargasDiarias = {};
+
+            // Ensure PM/PT exist and update colors
+            let pm = db.legendas.find(l => l.sigla === 'PM');
+            if (!pm) {
+                db.legendas.push({ sigla: "PM", desc: "Presente Manhã", color: "#fef9c3", text: "#854d0e", horas: 6.0 });
+            } else {
+                pm.color = "#fef9c3"; pm.text = "#854d0e"; pm.desc = "Presente Manhã";
+            }
+
+            let pt = db.legendas.find(l => l.sigla === 'PT');
+            if (!pt) {
+                db.legendas.push({ sigla: "PT", desc: "Presente Tarde", color: "#e0f2fe", text: "#0369a1", horas: 6.0 });
+            } else {
+                pt.color = "#e0f2fe"; pt.text = "#0369a1"; pt.desc = "Presente Tarde";
+            }
+            
+            // Fix 'P' name if needed
+            let p = db.legendas.find(l => l.sigla === 'P');
+            if(p) p.desc = "Presente";
+
         } else {
             console.error("Failed to load from API");
             db = DEFAULT_DB;
@@ -194,11 +240,84 @@ async function loadData() {
 
 
 function setupEventListeners() {
-    document.getElementById('fileInputCSV').addEventListener('change', importCSV);
+    const fileInputCSV = document.getElementById('fileInputCSV');
+    if(fileInputCSV) fileInputCSV.addEventListener('change', importCSV);
+
+    // Auto-set workload to 8h if Posto is 'Civil'
+    const inputPosto = document.getElementById('inputPosto');
+    if (inputPosto) {
+        inputPosto.addEventListener('input', (e) => {
+            const val = e.target.value;
+            if (val && val.toLowerCase().includes('civil')) {
+                const typeHora = document.getElementById('inputTypeHora');
+                if (typeHora) typeHora.value = '8h';
+            }
+        });
+    }
+
+    // Dashboard Date Reference Change
+    const dashDateRef = document.getElementById('dashDateRef');
+    if (dashDateRef) {
+        dashDateRef.addEventListener('change', renderDashboard);
+    }
 }
 
 function setupSectionFilter() {
-    const container = document.getElementById('filterSecoesContainer');
+    setupSpecificFilter('filterSecoesContainer', renderEscala);
+    setupSpecificFilter('filterSecoesContainerExtras', renderHorasExtras);
+    setupSpecificFilter('filterSecoesContainerDashboard', renderDashboard);
+    
+    applyUserSectionPreference();
+}
+
+function applyUserSectionPreference() {
+    if (!currentUser || !db.militares) return;
+    
+    // Find User's Section
+    // Ensure accurate matching by stripping formatting just in case, though usually clean.
+    // currentUser.username is digits only (as per login logic).
+    // db.militares.num is formatted "123.456-7".
+    
+    const userMilitar = db.militares.find(m => m.num.replace(/\D/g, '') === currentUser.username);
+    
+    // If admin, maybe we select all? Or still filter?
+    // Request says: "por default venha PRE-selecionado ... a seção que o militar pertence"
+    // Even if Admin, if they have a section, we select it.
+    
+    if (userMilitar && userMilitar.secao) {
+        const userSecao = userMilitar.secao;
+        
+        ['filterSecoesContainer', 'filterSecoesContainerExtras', 'filterSecoesContainerDashboard'].forEach(id => {
+            const container = document.getElementById(id);
+            if (!container) return;
+            
+            const checkBoxes = container.querySelectorAll('.filter-chk-item');
+            let found = false;
+            
+            checkBoxes.forEach(cb => {
+                if(cb.value === userSecao) {
+                    cb.checked = true;
+                    found = true;
+                } else {
+                    cb.checked = false;
+                }
+            });
+            
+            // Update "Select All" status
+            const chkAll = container.querySelector('input[id^="chk_all_"]');
+            if(chkAll) {
+                 // If we filtered to specific, "All" should likely be unchecked, 
+                 // unless the user belongs to ALL sections (impossible) or there is only 1 section.
+                 const allItems = container.querySelectorAll('.filter-chk-item');
+                 const allChecked = Array.from(allItems).every(i => i.checked);
+                 chkAll.checked = allChecked;
+            }
+        });
+    }
+}
+
+function setupSpecificFilter(containerId, renderCallback) {
+    const container = document.getElementById(containerId);
     if(!container) return;
 
     // Toggle logic for filter button
@@ -227,24 +346,57 @@ function setupSectionFilter() {
         return;
     }
 
+    // "Select All" Option
+    const divAll = document.createElement('div');
+    divAll.className = 'flex items-center gap-2 p-1.5 hover:bg-slate-50 rounded cursor-pointer border-b mb-1 pb-2 border-slate-100';
+    const allId = `chk_all_${containerId}`;
+    divAll.innerHTML = `
+        <input type="checkbox" id="${allId}" checked class="accent-indigo-600 w-4 h-4 cursor-pointer">
+        <label for="${allId}" class="text-xs font-black text-indigo-700 cursor-pointer flex-1 select-none">MARCAR TODOS</label>
+    `;
+    
+    container.appendChild(divAll);
+    const chkAll = divAll.querySelector('input');
+
+    // Individual Sections
     db.secoes.forEach(s => {
         const div = document.createElement('div');
         div.className = 'flex items-center gap-2 p-1.5 hover:bg-slate-50 rounded cursor-pointer';
+        // Unique ID for each checkbox
+        const chkId = `chk_${containerId}_${s.sigla}`;
         div.innerHTML = `
-            <input type="checkbox" id="chk_secao_${s.sigla}" value="${s.sigla}" checked class="accent-indigo-600 w-4 h-4 cursor-pointer secao-filter-chk">
-            <label for="chk_secao_${s.sigla}" class="text-xs font-bold text-slate-700 cursor-pointer flex-1 select-none">${s.sigla} - <span class="font-normal text-slate-500">${s.desc}</span></label>
+            <input type="checkbox" id="${chkId}" value="${s.sigla}" checked class="accent-indigo-600 w-4 h-4 cursor-pointer filter-chk-item">
+            <label for="${chkId}" class="text-xs font-bold text-slate-700 cursor-pointer flex-1 select-none">${s.sigla} - <span class="font-normal text-slate-500">${s.desc}</span></label>
         `;
-        div.querySelector('input').addEventListener('change', renderEscala);
+        
+        const chkItem = div.querySelector('input');
+        chkItem.addEventListener('change', () => {
+            // Update "All" checkbox if any item is unchecked
+            const allItems = container.querySelectorAll('.filter-chk-item');
+            const allChecked = Array.from(allItems).every(i => i.checked);
+            chkAll.checked = allChecked;
+            renderCallback();
+        });
+        
         container.appendChild(div);
+    });
+
+    // Handle "Select All" click
+    chkAll.addEventListener('change', (e) => {
+        const isChecked = e.target.checked;
+        const allItems = container.querySelectorAll('.filter-chk-item');
+        allItems.forEach(item => item.checked = isChecked);
+        renderCallback();
     });
 }
 
 
 function setupMonthSelector() {
     const selMes = document.getElementById('selMes');
-    const selMesExtras = document.getElementById('selMesExtras'); // New
+    const selMesExtras = document.getElementById('selMesExtras');
+    const selMesDash = document.getElementById('selMesDashboard');
     
-    [selMes, selMesExtras].forEach(sel => {
+    [selMes, selMesExtras, selMesDash].forEach(sel => {
         if(sel) {
             sel.innerHTML = '';
             meses.forEach((m, i) => sel.innerHTML += `<option value="${i}">${m.toUpperCase()} / 2026</option>`);
@@ -266,13 +418,21 @@ function showTab(id) {
         return;
     }
 
-    document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active', 'hidden'));
+    document.querySelectorAll('.tab-content:not(#' + id + ')').forEach(t => t.classList.add('hidden')); // Explicitly hide others
+
     document.querySelectorAll('nav a').forEach(a => {
         a.classList.remove('active-link', 'border-red-500');
         a.classList.add('border-transparent');
     });
 
-    document.getElementById(id).classList.add('active');
+    document.getElementById(id).classList.add('active'); // active class might use display block in CSS, but 'hidden' class overrides it often. 
+    // Usually 'active' sets display:flex per CSS. Let's trust classList manipulation.
+    // Actually, looking at index.html, tab-content has 'hidden' in dashboard but not others initially.
+    // The CSS probably has .tab-content { display: none } .tab-content.active { display: flex }.
+    // If so, just toggling active is enough if CSS is correct.
+    // But 'dashboard' has 'hidden' explicitly in HTML.
+    document.getElementById(id).classList.remove('hidden');
 
     const activeLink = document.getElementById('link-'+id);
     activeLink.classList.add('active-link', 'border-red-500');
@@ -282,18 +442,23 @@ function showTab(id) {
     if(id === 'horas-extras') renderHorasExtras();
     if(id === 'glossario') renderGlossario();
     if(id === 'config') renderConfig();
+    if(id === 'dashboard') renderDashboard();
 }
 
 function changeMonth(delta) {
-    // Determine which tab is active to update the correct selector
-    const isExtras = document.getElementById('horas-extras').classList.contains('active');
-    const selId = isExtras ? 'selMesExtras' : 'selMes';
+    let selId = 'selMes';
+    const activeTab = document.querySelector('.tab-content.active');
+    
+    if(activeTab.id === 'horas-extras') selId = 'selMesExtras';
+    if(activeTab.id === 'dashboard') selId = 'selMesDashboard';
     
     const sel = document.getElementById(selId);
     let newVal = parseInt(sel.value) + delta;
     if (newVal >= 0 && newVal < 12) {
         sel.value = newVal;
-        if(isExtras) renderHorasExtras(); else renderEscala();
+        if(activeTab.id === 'horas-extras') renderHorasExtras();
+        else if(activeTab.id === 'dashboard') renderDashboard();
+        else renderEscala();
     }
 }
 
@@ -342,8 +507,8 @@ function renderEscala() {
     // Header Generation
     const weekDays = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S'];
     let head = `<tr class="text-slate-500 font-bold uppercase text-[10px] tracking-wider border-b">
-        <th class="sticky-col-1 p-3 text-left w-20 min-w-[80px]">Seção</th>
-        <th class="sticky-col-2 p-3 text-left w-48 min-w-[192px]">Militar</th>
+        <th class="p-3 text-left w-20 min-w-[80px]">Seção</th>
+        <th class="p-3 text-left w-48 min-w-[192px]">Militar</th>
         <th class="p-2 border-l w-32 min-w-[128px]">Status Atual</th>
         <th class="p-2 border-l w-16 text-center">Horas</th>
         <th class="p-2 border-l w-16 text-center">H. Extras</th>
@@ -369,12 +534,22 @@ function renderEscala() {
     const search = document.getElementById('searchInput') ? document.getElementById('searchInput').value.toLowerCase() : "";
     
     // Get checked sections
-    const secaoCheckboxes = document.querySelectorAll('.secao-filter-chk');
-    const checkedSecoes = Array.from(secaoCheckboxes).filter(cb => cb.checked).map(cb => cb.value);
+    const filterContainer = document.getElementById('filterSecoesContainer');
+    let checkedSecoes = [];
+    let hasFilter = false;
+    
+    if(filterContainer) {
+        // Only select item checkboxes, ignore "select all"
+        const checkboxes = filterContainer.querySelectorAll('.filter-chk-item');
+        if(checkboxes.length > 0) {
+            hasFilter = true;
+            checkedSecoes = Array.from(checkboxes).filter(cb => cb.checked).map(cb => cb.value);
+        }
+    }
     
     const filteredMilitares = db.militares.filter(m => {
         // Apply Section Filter if checkboxes are present
-        if(secaoCheckboxes.length > 0 && !checkedSecoes.includes(m.secao)) {
+        if(hasFilter && !checkedSecoes.includes(m.secao)) {
             return false;
         }
 
@@ -398,35 +573,29 @@ function renderEscala() {
             const leg = val ? db.legendas.find(l => l.sigla === val) : null;
             
             if(leg) {
-                if(leg.sigla === 'P') {
-                    // Logic for Presencial based on Day of Week and typeHora
+                if(['P', 'PM', 'PT'].includes(leg.sigla)) {
+                    // Logic based on Legend used (P=8h rules, PM/PT=6h rules)
                     const date = new Date(2026, mesIdx, i);
                     const dayOfWeek = date.getDay(); // 0=Sun, 1=Mon, ..., 6=Sat
                     
-                    // Check for daily override, fallback to military default
-                    const overrideKey = `${m.id}-${mesIdx}-${i}`;
-                    const type = (db.cargasDiarias && db.cargasDiarias[overrideKey]) ? db.cargasDiarias[overrideKey] : (m.typeHora || "6h");
-
-                    if(type === '6h') {
+                    if(leg.sigla === 'PM' || leg.sigla === 'PT') {
+                        // 6h Profile Rules
                         if(dayOfWeek === 1 || dayOfWeek === 3 || dayOfWeek === 5) { // Mon, Wed, Fri
                             totalHoras += 6.0;
                         } else if(dayOfWeek === 2 || dayOfWeek === 4) { // Tue, Thu
                             totalHoras += 8.5;
                         } else {
-                            // Sat, Sun default? applying P base hours (8.0) or 0? 
-                            // Assuming base leg.horas for non-covered days if any
-                            totalHoras += parseFloat(leg.horas);
+                            // Outros dias (Sáb, Dom) = 8.0h default
+                            totalHoras += 8.0;
                         }
-                    } else if(type === '8h') {
+                    } else if(leg.sigla === 'P') {
+                        // 8h Profile Rules
                         if(dayOfWeek === 3) { // Wed
                             totalHoras += 4.5;
                         } else {
-                            // Any other day (including weekends if P provided?)
+                            // Any other day
                             totalHoras += 8.0; 
                         }
-                    } else {
-                        // Unknown type fallback
-                        totalHoras += parseFloat(leg.horas);
                     }
                 } else {
                     totalHoras += parseFloat(leg.horas);
@@ -456,7 +625,7 @@ function renderEscala() {
         let statusText = "";
         
         if (statusHoje) {
-            statusDisplay = statusHoje.desc;
+            statusDisplay = statusHoje.nome;
             statusBg = statusHoje.color;
             statusText = statusHoje.text;
         } else {
@@ -467,13 +636,13 @@ function renderEscala() {
         const extrasColor = horasExtras > 0 ? 'text-green-600' : (horasExtras < 0 ? 'text-red-500' : 'text-slate-400');
 
         body += `<tr class="${rowClass} hover:bg-blue-50 transition-colors border-b last:border-none">
-            <td class="sticky-col-1 p-2 font-bold text-center text-slate-600 border-r text-xs">${m.secao}</td>
-            <td class="sticky-col-2 p-2 font-bold text-slate-700 border-r text-xs">
+            <td class="p-2 font-bold text-center text-slate-600 border-r text-xs">${m.secao}</td>
+            <td class="p-2 font-bold text-slate-700 border-r text-xs">
                 <div class="flex items-center justify-between">
                     <div>
                         <span class="text-indigo-600 mr-1">${m.posto || ''}</span>${m.nome}
                     </div>
-                    <span class="cursor-pointer hover:ring-2 ring-indigo-300 px-1.5 py-0.5 rounded text-[9px] font-bold ${m.typeHora === '8h' ? 'bg-emerald-100 text-emerald-700 border border-emerald-200' : 'bg-blue-100 text-blue-700 border border-blue-200'}" title="Gerenciar Carga (Clique para Exceções)" onclick="openCargaManager(${m.id})">
+                    <span class="px-1.5 py-0.5 rounded text-[9px] font-bold ${m.typeHora === '8h' ? 'bg-emerald-100 text-emerald-700 border border-emerald-200' : 'bg-blue-100 text-blue-700 border border-blue-200'}" title="Carga Horária">
                         ${m.typeHora || '6h'}
                     </span>
                 </div>
@@ -496,12 +665,15 @@ function renderEscala() {
 
             const isDisabled = (currentUser && currentUser.role === 'USUARIO') ? 'disabled' : '';
 
+            // Show all options for everyone (requested by user)
+            const options = db.legendas.map(l => `<option value="${l.sigla}" ${l.sigla === valor ? 'selected' : ''}>${l.sigla}</option>`).join('');
+
             body += `<td style="background-color: ${cellBg};" class="border-r p-0 relative group h-10 w-[30px] min-w-[30px] ${isToday ? 'ring-2 ring-inset ring-blue-500 z-10' : ''}">
                 <select class="status-select hover:bg-black/5 transition-colors focus:outline-none disabled:opacity-70 disabled:cursor-not-allowed" 
                         style="color: ${textColor}" 
                         onchange="atualizarStatus('${key}', this.value)" ${isDisabled}>
                     <option value=""></option>
-                    ${db.legendas.map(l => `<option value="${l.sigla}" ${l.sigla === valor ? 'selected' : ''}>${l.sigla}</option>`).join('')}
+                    ${options}
                 </select>
                 ${leg ? `<div class="hidden group-hover:block absolute bottom-full left-1/2 -translate-x-1/2 mb-1 px-2 py-1 bg-gray-800 text-white text-[10px] rounded shadow-lg z-50 whitespace-nowrap pointer-events-none">
                     ${leg.desc}
@@ -532,8 +704,8 @@ function renderHorasExtras() {
     // Header Generation
     const weekDays = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S'];
     let head = `<tr class="text-slate-500 font-bold uppercase text-[10px] tracking-wider border-b">
-        <th class="sticky-col-1 p-3 text-left w-20 min-w-[80px]">Seção</th>
-        <th class="sticky-col-2 p-3 text-left w-48 min-w-[192px]">Militar</th>
+        <th class="p-3 text-left w-20 min-w-[80px]">Seção</th>
+        <th class="p-3 text-left w-48 min-w-[192px]">Militar</th>
         <th class="p-2 border-l w-24 text-center bg-slate-50">Total H.E.</th>`;
 
     for(let i=1; i<=diasNoMes; i++) {
@@ -554,7 +726,27 @@ function renderHorasExtras() {
 
     // Filter Logic
     const search = document.getElementById('searchInputExtras') ? document.getElementById('searchInputExtras').value.toLowerCase() : "";
+
+    // Get checked sections for Extras
+    const filterContainer = document.getElementById('filterSecoesContainerExtras');
+    let checkedSecoes = [];
+    let hasFilter = false;
+    
+    if(filterContainer) {
+        // Only select item checkboxes, ignore "select all"
+        const checkboxes = filterContainer.querySelectorAll('.filter-chk-item');
+        if(checkboxes.length > 0) {
+            hasFilter = true;
+            checkedSecoes = Array.from(checkboxes).filter(cb => cb.checked).map(cb => cb.value);
+        }
+    }
+
     const filteredMilitares = db.militares.filter(m => {
+        // Apply Section Filter
+        if(hasFilter && !checkedSecoes.includes(m.secao)) {
+            return false;
+        }
+
         if(!search) return true;
         return (m.nome.toLowerCase().includes(search) || m.num.includes(search) || m.secao.toLowerCase().includes(search));
     });
@@ -606,13 +798,13 @@ function renderHorasExtras() {
         const totalColor = totalExtras > 0 ? 'text-green-600' : (totalExtras < 0 ? 'text-red-600' : 'text-slate-300');
 
         body += `<tr class="${rowClass} hover:bg-red-50 transition-colors border-b last:border-none">
-            <td class="sticky-col-1 p-2 font-bold text-center text-slate-600 border-r text-xs">${m.secao}</td>
-            <td class="sticky-col-2 p-2 font-bold text-slate-700 border-r text-xs">
+            <td class="p-2 font-bold text-center text-slate-600 border-r text-xs">${m.secao}</td>
+            <td class="p-2 font-bold text-slate-700 border-r text-xs">
                 <div class="flex items-center justify-between">
                     <div>
                         <span class="text-indigo-600 mr-1">${m.posto || ''}</span>${m.nome}
                     </div>
-                    <span class="cursor-pointer hover:ring-2 ring-indigo-300 px-1.5 py-0.5 rounded text-[9px] font-bold ${m.typeHora === '8h' ? 'bg-emerald-100 text-emerald-700 border border-emerald-200' : 'bg-blue-100 text-blue-700 border border-blue-200'}" title="Gerenciar Carga (Clique para Exceções)" onclick="openCargaManager(${m.id})">
+                    <span class="px-1.5 py-0.5 rounded text-[9px] font-bold ${m.typeHora === '8h' ? 'bg-emerald-100 text-emerald-700 border border-emerald-200' : 'bg-blue-100 text-blue-700 border border-blue-200'}" title="Carga Horária">
                         ${m.typeHora || '6h'}
                     </span>
                 </div>
@@ -692,8 +884,9 @@ function renderGlossario() {
             <div class="flex items-center gap-5">
                 <div style="background-color: ${l.color}; color: ${l.text}" class="w-14 h-14 rounded-xl flex items-center justify-center font-black text-xl shadow-inner">${l.sigla}</div>
                 <div>
-                    <div class="font-bold text-lg text-slate-700 group-hover:text-indigo-600 transition-colors">${l.desc}</div>
-                    <div class="text-xs text-slate-400 font-medium">Código: <span class="font-mono text-slate-500">${l.sigla}</span></div>
+                    <div class="font-bold text-lg text-slate-700 group-hover:text-indigo-600 transition-colors">${l.nome}</div>
+                    <div class="text-[11px] text-slate-500 mt-0.5 leading-tight">${l.desc || ''}</div>
+                    <div class="text-[10px] text-slate-400 font-medium mt-1">Código: <span class="font-mono text-slate-500">${l.sigla}</span></div>
                 </div>
             </div>
             <div class="text-right">
@@ -706,13 +899,13 @@ function renderGlossario() {
         <div class="col-span-full mt-4 bg-indigo-50 p-6 rounded-2xl border border-indigo-100">
             <h3 class="text-indigo-900 font-bold mb-4 flex items-center gap-2 text-lg">
                 <i class="fas fa-info-circle"></i>
-                Regras de Contagem de Horas (Presencial - P)
+                Regras de Contagem de Horas
             </h3>
             <div class="grid md:grid-cols-2 gap-6 text-sm text-indigo-800">
                 <div class="bg-white p-4 rounded-xl shadow-sm border border-indigo-100">
                     <div class="font-bold mb-2 text-indigo-900 flex items-center gap-2">
                         <span class="w-2 h-2 rounded-full bg-indigo-500"></span>
-                        Militar com Carga 6h
+                        Militar 6h (Use PM/PT)
                     </div>
                     <ul class="space-y-2">
                         <li class="flex justify-between border-b border-dashed border-indigo-100 pb-1">
@@ -732,7 +925,7 @@ function renderGlossario() {
                  <div class="bg-white p-4 rounded-xl shadow-sm border border-indigo-100">
                     <div class="font-bold mb-2 text-indigo-900 flex items-center gap-2">
                         <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
-                        Militar com Carga 8h
+                        Militar 8h (Use P)
                     </div>
                     <ul class="space-y-2">
                         <li class="flex justify-between border-b border-dashed border-indigo-100 pb-1">
@@ -770,7 +963,8 @@ function renderLegendasConfig() {
                     ${l.sigla}
                 </div>
                 <div>
-                    <div class="font-bold text-slate-800">${l.desc}</div>
+                    <div class="font-bold text-slate-800">${l.nome}</div>
+                    <div class="text-[10px] text-slate-500">${l.desc || ''}</div>
                     <div class="text-xs text-slate-400 font-medium">
                         ${parseFloat(l.horas).toFixed(1)}h · 
                         <span class="inline-block w-2 h-2 rounded-full" style="background-color:${l.color}"></span> Fundo / 
@@ -833,14 +1027,16 @@ function openModalLegenda(idx = null) {
         const l = db.legendas[idx];
         title.innerText = "Editar Legenda";
         document.getElementById('inputSigla').value = l.sigla;
-        document.getElementById('inputDesc').value = l.desc;
+        document.getElementById('inputNomeLegenda').value = l.nome;
+        document.getElementById('inputDescLegenda').value = l.desc || "";
         document.getElementById('inputHoras').value = l.horas;
         document.getElementById('inputColorBg').value = l.color;
         document.getElementById('inputColorText').value = l.text;
     } else {
         title.innerText = "Nova Legenda"; // Reset for new
         document.getElementById('inputSigla').value = "";
-        document.getElementById('inputDesc').value = "";
+        document.getElementById('inputNomeLegenda').value = "";
+        document.getElementById('inputDescLegenda').value = "";
         document.getElementById('inputHoras').value = "0.0";
         document.getElementById('inputColorBg').value = "#f1f5f9";
         document.getElementById('inputColorText').value = "#64748b";
@@ -865,22 +1061,23 @@ function closeModalLegenda() {
 
 function saveLegenda() {
     const sigla = document.getElementById('inputSigla').value.toUpperCase();
-    const desc = document.getElementById('inputDesc').value;
+    const nome = document.getElementById('inputNomeLegenda').value;
+    const desc = document.getElementById('inputDescLegenda').value;
     const horas = parseFloat(document.getElementById('inputHoras').value) || 0.0;
     const color = document.getElementById('inputColorBg').value;
     const text = document.getElementById('inputColorText').value;
 
-    if (!sigla || !desc) {
-        alert("Preencha Sigla e Descrição.");
+    if (!sigla || !nome) {
+        alert("Preencha Sigla e Nome.");
         return;
     }
 
     if (currentEditLegendaId !== null) {
         // Edit
-        db.legendas[currentEditLegendaId] = { sigla, desc, horas, color, text };
+        db.legendas[currentEditLegendaId] = { sigla, nome, desc, horas, color, text };
     } else {
         // Create
-        db.legendas.push({ sigla, desc, horas, color, text });
+        db.legendas.push({ sigla, nome, desc, horas, color, text });
     }
 
     save();
@@ -959,7 +1156,12 @@ async function saveMilitar() {
     const num = document.getElementById('inputNum').value;
     const secao = document.getElementById('inputSecao').value;
     const posto = document.getElementById('inputPosto').value;
-    const typeHora = document.getElementById('inputTypeHora').value;
+    let typeHora = document.getElementById('inputTypeHora').value;
+
+    // Rule: Civis must be 8h
+    if (posto && posto.toLowerCase().includes('civil')) {
+        typeHora = '8h';
+    }
 
     const hasAccess = document.getElementById('chkAcessoSistema').checked;
     const role = document.getElementById('inputMilitarRole').value;
@@ -1244,26 +1446,14 @@ function removeSecao(i) {
 
 // ------ MANAGING WORKLOAD EXCEPTIONS ------
 
-let currentMilitarCargaId = null;
+// Functionality removed as requested (2026-02-05).
+// Workload deviations now handled by explicit legend use (PT/PM vs P).
 
-function openCargaManager(militarId) {
-    if (currentUser && currentUser.role === 'USUARIO') {
-        alert("Ação permitida apenas para Gerentes e Administradores.");
-        return;
-    }
+// ------ CSV IMPORT FUNCTIONS ------
 
-    currentMilitarCargaId = militarId;
-    
-    // Reset inputs
-    document.getElementById('cargaStart').value = '';
-    document.getElementById('cargaEnd').value = '';
-    selectCargaModal('6h'); // Default
-
-    // Render Active Exceptions List
-    const mesIdx = parseInt(document.getElementById('selMes').value);
-    renderExcecoesList(currentMilitarCargaId, mesIdx);
-
-    const modal = document.getElementById('modalCargaManager');
+// Modal Functions
+function openModalImportSecoes() {
+    const modal = document.getElementById('modalImportSecoes');
     modal.classList.remove('hidden');
     requestAnimationFrame(() => {
         modal.classList.remove('opacity-0');
@@ -1271,160 +1461,414 @@ function openCargaManager(militarId) {
     });
 }
 
-function renderExcecoesList(militarId, mesIdx) {
-    const container = document.getElementById('listaExcecoesContainer');
-    const content = document.getElementById('listaExcecoesContent');
-    if(!container || !content) return;
+function closeModalImportSecoes() {
+    const modal = document.getElementById('modalImportSecoes');
+    modal.classList.add('opacity-0');
+    modal.querySelector('div').classList.add('scale-95');
+    setTimeout(() => modal.classList.add('hidden'), 300);
+    document.getElementById('fileImportSecoes').value = '';
+    document.getElementById('previewSecoes').classList.add('hidden');
+}
 
-    content.innerHTML = '';
-    
-    // Find all exceptions for this month
-    const exceptions = [];
-    const diasNoMes = new Date(2026, mesIdx + 1, 0).getDate();
-    
-    for(let d=1; d<=diasNoMes; d++) {
-        const key = `${militarId}-${mesIdx}-${d}`;
-        if(db.cargasDiarias && db.cargasDiarias[key]) {
-             exceptions.push({ day: d, type: db.cargasDiarias[key] });
-        }
-    }
-    
-    if (exceptions.length === 0) {
-        container.classList.add('hidden');
-        return;
-    }
-    
-    container.classList.remove('hidden');
-
-    // Grouping consecutive days
-    let ranges = [];
-    if(exceptions.length > 0) {
-        let currentRange = { start: exceptions[0].day, end: exceptions[0].day, type: exceptions[0].type };
-        
-        for(let i=1; i<exceptions.length; i++) {
-            const ex = exceptions[i];
-            // Check if consecutive day AND same type
-            if(ex.day === currentRange.end + 1 && ex.type === currentRange.type) {
-                currentRange.end = ex.day;
-            } else {
-                ranges.push(currentRange);
-                currentRange = { start: ex.day, end: ex.day, type: ex.type };
-            }
-        }
-        ranges.push(currentRange);
-    }
-
-    ranges.forEach(r => {
-        const rangeText = (r.start === r.end) ? `Dia ${r.start}` : `Dias ${r.start} a ${r.end}`;
-        const item = document.createElement('div');
-        item.className = "flex justify-between items-center bg-gray-50 p-2 rounded border border-gray-100 text-xs";
-        item.innerHTML = `
-            <span class="text-slate-600 font-medium">
-                ${rangeText} <span class="ml-2 font-bold ${r.type==='8h'?'text-emerald-600':'text-blue-600'}">${r.type}</span>
-            </span>
-            <button onclick="deleteCargaRange(${militarId}, ${mesIdx}, ${r.start}, ${r.end})" class="text-gray-400 hover:text-red-500 transition px-2" title="Excluir Exceção">
-                <i class="fas fa-trash-alt"></i>
-            </button>
-        `;
-        content.appendChild(item);
+function openModalImportLegendas() {
+    const modal = document.getElementById('modalImportLegendas');
+    modal.classList.remove('hidden');
+    requestAnimationFrame(() => {
+        modal.classList.remove('opacity-0');
+        modal.querySelector('div').classList.remove('scale-95');
     });
 }
 
-function deleteCargaRange(militarId, mesIdx, start, end) {
-    if(!confirm("Deseja remover esta exceção?")) return;
-
-    for (let d = start; d <= end; d++) {
-        const key = `${militarId}-${mesIdx}-${d}`;
-        if(db.cargasDiarias[key]) delete db.cargasDiarias[key];
-    }
-    
-    save();
-    renderEscala();
-    // Refresh list without closing modal
-    renderExcecoesList(militarId, mesIdx); 
-}
-
-function closeModalCarga() {
-    const modal = document.getElementById('modalCargaManager');
+function closeModalImportLegendas() {
+    const modal = document.getElementById('modalImportLegendas');
     modal.classList.add('opacity-0');
     modal.querySelector('div').classList.add('scale-95');
-    setTimeout(() => {
-        modal.classList.add('hidden');
-        currentMilitarCargaId = null;
-    }, 300);
+    setTimeout(() => modal.classList.add('hidden'), 300);
+    document.getElementById('fileImportLegendas').value = '';
+    document.getElementById('previewLegendas').classList.add('hidden');
 }
 
-function selectCargaModal(val) {
-    document.getElementById('inputCargaVal').value = val;
-    
-    const btn6 = document.getElementById('btnCarga6h');
-    const btn8 = document.getElementById('btnCarga8h');
-    
-    // Reset classes
-    const activeClass = "border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100";
-    const inactiveClass = "border-gray-200 text-gray-400 hover:bg-gray-50";
-
-    // Clean first
-    btn6.className = "flex-1 py-2 rounded font-bold transition " + (val === '6h' ? activeClass : inactiveClass);
-    btn8.className = "flex-1 py-2 rounded font-bold transition " + (val === '8h' ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100" : inactiveClass);
+function openModalImportMilitares() {
+    const modal = document.getElementById('modalImportMilitares');
+    modal.classList.remove('hidden');
+    requestAnimationFrame(() => {
+        modal.classList.remove('opacity-0');
+        modal.querySelector('div').classList.remove('scale-95');
+    });
 }
 
-function saveCargaPeriod() {
-    if (!currentMilitarCargaId) return;
-    
-    const start = parseInt(document.getElementById('cargaStart').value);
-    const end = parseInt(document.getElementById('cargaEnd').value);
-    const type = document.getElementById('inputCargaVal').value;
-    const mesIdx = parseInt(document.getElementById('selMes').value); // Use current global month context
+function closeModalImportMilitares() {
+    const modal = document.getElementById('modalImportMilitares');
+    modal.classList.add('opacity-0');
+    modal.querySelector('div').classList.add('scale-95');
+    setTimeout(() => modal.classList.add('hidden'), 300);
+    document.getElementById('fileImportMilitares').value = '';
+    document.getElementById('previewMilitares').classList.add('hidden');
+}
 
-    if (!start || !end || start > end) {
-        alert("Por favor selecione um intervalo de dias válido.");
+// Helper: Read file and parse CSV
+function readFileAsText(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = (e) => resolve(e.target.result);
+        reader.onerror = (e) => reject(e);
+        reader.readAsText(file);
+    });
+}
+
+// Seções Import
+document.addEventListener('DOMContentLoaded', () => {
+    const fileInput = document.getElementById('fileImportSecoes');
+    if (fileInput) {
+        fileInput.addEventListener('change', async (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                try {
+                    const content = await readFileAsText(file);
+                    const preview = parseCSVPreview(content, 2);
+                    const previewDiv = document.getElementById('previewSecoesContent');
+                    previewDiv.innerHTML = preview.map(row => 
+                        `<div class="border-b pb-1"><strong>${row.SIGLA || row.sigla || 'N/A'}</strong> - ${row['NOME/DESCRIÇÃO'] || row.nome || 'N/A'}</div>`
+                    ).join('');
+                    document.getElementById('previewSecoes').classList.remove('hidden');
+                } catch (err) {
+                    alert('Erro ao ler arquivo: ' + err.message);
+                }
+            }
+        });
+    }
+});
+
+document.addEventListener('DOMContentLoaded', () => {
+    const fileInput = document.getElementById('fileImportLegendas');
+    if (fileInput) {
+        fileInput.addEventListener('change', async (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                try {
+                    const content = await readFileAsText(file);
+                    const preview = parseCSVPreview(content, 2);
+                    const previewDiv = document.getElementById('previewLegendasContent');
+                    previewDiv.innerHTML = preview.map(row => 
+                        `<div class="border-b pb-1"><strong>${row.SIGLA || row.sigla || 'N/A'}</strong> - ${row.DESCRIÇÃO || row.desc || 'N/A'} (${row.HORA || row.horas || '0'} h)</div>`
+                    ).join('');
+                    document.getElementById('previewLegendas').classList.remove('hidden');
+                } catch (err) {
+                    alert('Erro ao ler arquivo: ' + err.message);
+                }
+            }
+        });
+    }
+});
+
+document.addEventListener('DOMContentLoaded', () => {
+    const fileInput = document.getElementById('fileImportMilitares');
+    if (fileInput) {
+        fileInput.addEventListener('change', async (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                try {
+                    const content = await readFileAsText(file);
+                    const preview = parseCSVPreview(content, 3);
+                    const previewDiv = document.getElementById('previewMilitaresContent');
+                    previewDiv.innerHTML = preview.map(row => 
+                        `<div class="border-b pb-1"><strong>${row.Matricula || row.matricula || 'N/A'}</strong> - ${row['Nome Completo'] || row.nome || 'N/A'}</div>`
+                    ).join('');
+                    document.getElementById('previewMilitares').classList.remove('hidden');
+                } catch (err) {
+                    alert('Erro ao ler arquivo: ' + err.message);
+                }
+            }
+        });
+    }
+});
+
+// Parse CSV for preview (show first N rows)
+function parseCSVPreview(csvContent, maxRows = 5) {
+    const lines = csvContent.trim().split('\n');
+    if (lines.length === 0) return [];
+
+    // Detect separator (TAB or comma)
+    const firstLine = lines[0];
+    const separator = firstLine.includes('\t') ? '\t' : ',';
+
+    const headers = firstLine.split(separator).map(h => h.trim());
+    const data = [];
+
+    for (let i = 1; i < lines.length && i <= maxRows; i++) {
+        const values = lines[i].split(separator).map(v => v.trim());
+        const row = {};
+        headers.forEach((header, index) => {
+            row[header] = values[index] || '';
+        });
+        data.push(row);
+    }
+
+    return data;
+}
+
+// Import Seções
+async function importSecoesCSV() {
+    const fileInput = document.getElementById('fileImportSecoes');
+    const file = fileInput.files[0];
+
+    if (!file) {
+        alert('Selecione um arquivo CSV');
         return;
     }
 
-    // Apply to DB
-    for (let d = start; d <= end; d++) {
-        const key = `${currentMilitarCargaId}-${mesIdx}-${d}`;
-        db.cargasDiarias[key] = type;
-    }
+    try {
+        const content = await readFileAsText(file);
+        const resp = await fetch(`${API_URL}/import/secoes`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Role': currentUser.role
+            },
+            body: JSON.stringify({ csvContent: content })
+        });
 
-    save();
-    closeModalCarga();
-    renderEscala();
-    // Also re-render extras if that tab is open, but simple renderEscala is mostly enough
+        const result = await resp.json();
+
+        if (resp.ok) {
+            alert(result.message || 'Seções importadas com sucesso!');
+            closeModalImportSecoes();
+            await loadData();
+            renderConfig();
+            setupSectionFilter();
+        } else {
+            alert('Erro: ' + (result.error || 'Erro desconhecido'));
+        }
+    } catch (err) {
+        alert('Erro ao importar: ' + err.message);
+    }
 }
 
-function clearCargaPeriod() {
-    if (!currentMilitarCargaId) return;
+// Import Legendas
+async function importLegendasCSV() {
+    const fileInput = document.getElementById('fileImportLegendas');
+    const file = fileInput.files[0];
 
-    const start = parseInt(document.getElementById('cargaStart').value);
-    const end = parseInt(document.getElementById('cargaEnd').value);
-    const mesIdx = parseInt(document.getElementById('selMes').value);
-
-    // If no range specified, maybe clear all for this month? 
-    // Or ask for range. Let's require range for safety.
-     if (!start || !end || start > end) {
-        if(confirm("Nenhum intervalo válido selecionado. Deseja limpar TODAS as exceções deste militar neste mês?")) {
-            // Clear all for month
-            // We need to iterate keys
-             Object.keys(db.cargasDiarias).forEach(k => {
-                const [mid, m, d] = k.split('-').map(Number);
-                if(mid === currentMilitarCargaId && m === mesIdx) {
-                    delete db.cargasDiarias[k];
-                }
-             });
-        } else {
-            return;
-        }
-    } else {
-        // Clear range
-         for (let d = start; d <= end; d++) {
-            const key = `${currentMilitarCargaId}-${mesIdx}-${d}`;
-            delete db.cargasDiarias[key];
-        }
+    if (!file) {
+        alert('Selecione um arquivo CSV');
+        return;
     }
 
-    save();
-    closeModalCarga();
-    renderEscala();
+    try {
+        const content = await readFileAsText(file);
+        const resp = await fetch(`${API_URL}/import/legendas`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Role': currentUser.role
+            },
+            body: JSON.stringify({ csvContent: content })
+        });
+
+        const result = await resp.json();
+
+        if (resp.ok) {
+            alert(result.message || 'Legendas importadas com sucesso!');
+            closeModalImportLegendas();
+            await loadData();
+            renderConfig();
+            renderGlossario();
+            renderEscala();
+        } else {
+            alert('Erro: ' + (result.error || 'Erro desconhecido'));
+        }
+    } catch (err) {
+        alert('Erro ao importar: ' + err.message);
+    }
+}
+
+// Import Militares
+async function importMilitaresCSV() {
+    const fileInput = document.getElementById('fileImportMilitares');
+    const file = fileInput.files[0];
+
+    if (!file) {
+        alert('Selecione um arquivo CSV');
+        return;
+    }
+
+    try {
+        const content = await readFileAsText(file);
+        const resp = await fetch(`${API_URL}/import/militares`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Role': currentUser.role
+            },
+            body: JSON.stringify({ csvContent: content })
+        });
+
+        const result = await resp.json();
+
+        if (resp.ok) {
+            alert(result.message || 'Militares importados com sucesso!');
+            closeModalImportMilitares();
+            await loadData();
+            renderConfig();
+            renderEscala();
+        } else {
+            alert('Erro: ' + (result.error || 'Erro desconhecido'));
+        }
+    } catch (err) {
+        alert('Erro ao importar: ' + err.message);
+    }
+}
+
+// ------ DASHBOARD ------
+
+function renderDashboard() {
+    const selMes = document.getElementById('selMesDashboard');
+    const dateRefInput = document.getElementById('dashDateRef');
+    if (!selMes || !dateRefInput) return;
+    
+    // Set default date to TODAY if empty
+    if (!dateRefInput.value) {
+        // Adjust for timezone offset to ensure "Today" is correct locally
+        const today = new Date();
+        const y = today.getFullYear();
+        const m = String(today.getMonth() + 1).padStart(2, '0');
+        const d = String(today.getDate()).padStart(2, '0');
+        dateRefInput.value = `${y}-${m}-${d}`;
+    }
+
+    // Sync Hidden Month Selector with Date Picker
+    // Because selMesDashboard is now hidden, we must ensure it stays in sync so 'month' var is correct
+    // or just derive everything from dateRefInput.
+    const refDateVal = dateRefInput.value; // YYYY-MM-DD
+    if (refDateVal) {
+        const [rY, rM, rD] = refDateVal.split('-').map(Number);
+        // selMes values are 0-11
+        const targetMesVal = String(rM - 1);
+        if (selMes.value !== targetMesVal) {
+            selMes.value = targetMesVal;
+        }
+    }
+    
+    const month = parseInt(selMes.value); // 0-based
+    const year = 2026; 
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    
+    const tableBody = document.getElementById('dashboardTableBody');
+    const tableFoot = document.getElementById('dashboardTableFoot');
+    if(tableBody) tableBody.innerHTML = '';
+    if(tableFoot) tableFoot.innerHTML = '';
+    
+    // Sort sections
+    const sortedSecoes = [...db.secoes].sort((a,b) => a.sigla.localeCompare(b.sigla));
+
+    // Filter Logic for Dashboard
+    const filterContainer = document.getElementById('filterSecoesContainerDashboard');
+    let checkedSecoes = [];
+    let hasFilter = false;
+    
+    if(filterContainer) {
+        // Only select item checkboxes, ignore "select all"
+        const checkboxes = filterContainer.querySelectorAll('.filter-chk-item');
+        if(checkboxes.length > 0) {
+            hasFilter = true;
+            checkedSecoes = Array.from(checkboxes).filter(cb => cb.checked).map(cb => cb.value);
+        }
+    }
+    
+    // Accumulators for Footer
+    let grandTotalMil = 0;
+    let grandTotalPreenchidos = 0;
+    let grandTotalPresentes = 0;
+
+    const [refY, refM, refD] = refDateVal.split('-').map(Number);
+    const refMonthIdx = refM - 1;
+
+    sortedSecoes.forEach(secao => {
+        // Apply Filters
+        if (hasFilter && !checkedSecoes.includes(secao.sigla)) {
+            return;
+        }
+
+        const militaresDaSecao = db.militares.filter(m => m.secao === secao.sigla);
+        
+        let countPreenchidos = 0;
+        let countPresentes = 0;
+        
+        militaresDaSecao.forEach(m => {
+            const refKey = `${m.id}-${refMonthIdx}-${refD}`;
+
+            // Count Preenchidos:
+            // Consider "Preenchido" if the soldier has ANY defined status for the Reference Date.
+            if(db.escala[refKey] && db.escala[refKey] !== "") {
+                countPreenchidos++;
+            }
+            
+            // Count Presentes:
+            // "Presente" check is specific to the Reference Date (dashDateRef).
+            // We consider P, PM, PT as "Presente".
+            if(db.escala[refKey]) {
+                const val = db.escala[refKey];
+                if(['P', 'PM', 'PT'].includes(val)) {
+                    countPresentes++;
+                }
+            }
+        });
+
+        // Calculations
+        const total = militaresDaSecao.length;
+        const percPres = total > 0 ? (countPresentes / total * 100).toFixed(2) : "0.00";
+        const percPreench = total > 0 ? (countPreenchidos / total * 100).toFixed(2) : "0.00";
+
+        // Update Grand Totals
+        grandTotalMil += total;
+        grandTotalPreenchidos += countPreenchidos;
+        grandTotalPresentes += countPresentes;
+        
+        // Render Row
+        const tr = document.createElement('tr');
+        tr.className = "hover:bg-slate-50 transition border-b border-slate-100 last:border-none";
+        tr.innerHTML = `
+            <td class="px-6 py-4 font-bold text-slate-700 max-w-[150px] truncate" title="${secao.desc || ''}">${secao.sigla}</td>
+            <td class="px-6 py-4 text-center font-bold text-emerald-600">${countPresentes}</td>
+            <td class="px-6 py-4 text-center font-bold text-blue-600">${countPreenchidos}</td>
+            <td class="px-6 py-4 text-center font-bold text-slate-800">${total}</td>
+            <td class="px-6 py-4 text-center font-medium text-slate-600 bg-slate-50/50">${percPres}%</td>
+            <td class="px-6 py-4 text-center font-medium text-slate-600 bg-slate-50/50">${percPreench}%</td>
+        `;
+        tableBody.appendChild(tr);
+    });
+    
+    // Render Footer
+    const grandPercPres = grandTotalMil > 0 ? (grandTotalPresentes / grandTotalMil * 100).toFixed(2) : "0.00";
+    const grandPercPreench = grandTotalMil > 0 ? (grandTotalPreenchidos / grandTotalMil * 100).toFixed(2) : "0.00";
+    
+    tableFoot.innerHTML = `
+        <tr class="bg-slate-100 p-2 border-t-2 border-slate-200">
+            <td class="px-6 py-4 font-black text-slate-800 uppercase tracking-wider">TOTAL GERAL</td>
+            <td class="px-6 py-4 text-center font-black text-emerald-700 text-lg">${grandTotalPresentes}</td>
+            <td class="px-6 py-4 text-center font-black text-blue-700 text-lg">${grandTotalPreenchidos}</td>
+            <td class="px-6 py-4 text-center font-black text-slate-900 text-lg">${grandTotalMil}</td>
+            <td class="px-6 py-4 text-center font-bold text-slate-700">${grandPercPres}%</td>
+            <td class="px-6 py-4 text-center font-bold text-slate-700">${grandPercPreench}%</td>
+        </tr>
+    `;
+}
+
+// ------ MOBILE UI ------
+
+function toggleSidebar() {
+    const sidebar = document.getElementById('sidebar');
+    const overlay = document.getElementById('overlaySidebar');
+    
+    if (sidebar.classList.contains('-translate-x-full')) {
+        // Open
+        sidebar.classList.remove('-translate-x-full');
+        sidebar.classList.add('translate-x-0'); 
+        overlay.classList.remove('hidden');
+    } else {
+        // Close
+        sidebar.classList.add('-translate-x-full');
+        sidebar.classList.remove('translate-x-0');
+        overlay.classList.add('hidden');
+    }
 }

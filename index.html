@@ -3,19 +3,31 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>BM CONTROL - V5</title>
+    <title>BMTrack - Gestão de Destinos</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link href="css/style.css" rel="stylesheet">
 </head>
 <body class="bg-slate-100 flex h-screen overflow-hidden text-slate-800 font-sans">
+    
+    <!-- Mobile Header -->
+    <header class="md:hidden fixed top-0 w-full bg-slate-900 h-16 flex items-center justify-between px-4 z-50 shadow-md">
+        <div class="flex items-center gap-2">
+            <img src="img/logo.png" class="h-8 w-auto">
+            <span class="font-bold text-white tracking-tighter">BMTrack</span>
+        </div>
+        <button onclick="toggleSidebar()" class="text-white text-xl p-2 rounded hover:bg-slate-800">
+            <i class="fas fa-bars"></i>
+        </button>
+    </header>
 
     <!-- Login Overlay -->
-    <div id="loginOverlay" class="fixed inset-0 z-[100] bg-slate-900 flex items-center justify-center">
-        <div class="bg-white p-8 rounded-2xl shadow-2xl w-full max-w-md">
-            <div class="text-center mb-8">
-                <h1 class="text-3xl font-black text-indigo-900 tracking-tighter mb-2">BM CONTROL</h1>
-                <p class="text-slate-500">Sistema de Gestão de Escala</p>
+    <div id="loginOverlay" class="fixed inset-0 z-[100] bg-slate-900 flex items-center justify-center p-4">
+        <div class="bg-white p-6 md:p-8 rounded-2xl shadow-2xl w-full max-w-md max-h-screen overflow-y-auto">
+            <div class="text-center mb-6 md:mb-8 flex flex-col items-center">
+                <img src="img/logo.png" alt="BMTrack Logo" class="h-40 mb-1">
+                <h1 class="text-xl font-black text-indigo-900 tracking-tighter mb-2">BMTrack</h1>
+                <p class="text-slate-500 text-sm">Sistema de Gestão de Destinos e Presenças</p>
             </div>
             <form id="loginForm" class="space-y-4" onsubmit="handleLogin(event)">
                 <div>
@@ -37,11 +49,15 @@
         </div>
     </div>
 
-    <aside class="w-64 bg-slate-900 text-white flex flex-col shrink-0 shadow-xl z-50 transition-all duration-300" id="sidebar">
-        <div class="p-6 text-2xl font-bold border-b border-slate-800 flex items-center gap-3 bg-slate-950 truncate">
-            <span class="tracking-tighter bg-gradient-to-r from-blue-400 to-indigo-400 bg-clip-text text-transparent">BM CONTROL</span>
+    <aside class="fixed md:relative top-0 left-0 h-full w-64 bg-slate-900 text-white flex flex-col shrink-0 shadow-xl z-[60] transition-transform duration-300 transform -translate-x-full md:translate-x-0 pt-16 md:pt-0" id="sidebar">
+        <div class="hidden md:flex p-4 text-lg font-bold border-b border-slate-800 items-center gap-1 bg-slate-950 truncate">
+            <img src="img/logo.png" class="h-16 w-auto">
+            <span class="tracking-tighter bg-gradient-to-r from-blue-400 to-indigo-400 bg-clip-text text-transparent">BMTrack</span>
         </div>
-        <nav class="flex-1 mt-6 text-sm font-medium">
+        <nav class="flex-1 mt-6 text-sm font-medium overflow-y-auto">
+            <a href="#" onclick="showTab('dashboard')" class="flex items-center p-4 hover:bg-slate-800 transition-all duration-200 border-l-4 border-transparent" id="link-dashboard">
+                <i class="fas fa-chart-pie mr-3 w-5 text-purple-400"></i> DASHBOARD
+            </a>
             <a href="#" onclick="showTab('escala')" class="flex items-center p-4 hover:bg-slate-800 transition-all duration-200 active-link border-l-4 border-transparent" id="link-escala">
                 <i class="fas fa-calendar-alt mr-3 w-5 text-blue-400"></i> ESCALA DE SERVIÇO
             </a>
@@ -70,8 +86,7 @@
         </div>
     </aside>
 
-    <!-- Modal Change Password -->
-    <div id="modalChangePass" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[80] hidden flex items-center justify-center opacity-0 transition-opacity duration-300">
+    <div id="modalChangePass" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[80] hidden flex items-center justify-center opacity-0 transition-opacity duration-300 px-4">
         <div class="bg-white rounded-2xl shadow-2xl w-full max-w-sm transform scale-95 transition-transform duration-300 flex flex-col">
             <div class="p-5 border-b flex justify-between items-center">
                 <h3 class="font-bold text-slate-700">Alterar Senha</h3>
@@ -98,11 +113,13 @@
         </div>
     </div>
 
-    <main class="flex-1 flex flex-col relative bg-slate-50">
+    <div id="overlaySidebar" onclick="toggleSidebar()" class="fixed inset-0 bg-black/50 z-[55] hidden md:hidden"></div>
+
+    <main class="flex-1 flex flex-col relative bg-slate-50 overflow-hidden pt-16 md:pt-0">
         
         <!-- Modal Legenda -->
-        <div id="modalLegenda" class="modal-overlay">
-            <div class="modal-content">
+        <div id="modalLegenda" class="modal-overlay px-4">
+            <div class="modal-content max-h-[90vh] overflow-y-auto">
                 <div class="p-6 border-b flex justify-between items-center bg-indigo-50 rounded-t-xl">
                     <h3 class="font-bold text-lg text-indigo-900" id="modalTitleLegenda">Nova Legenda</h3>
                     <button onclick="closeModalLegenda()" class="text-indigo-400 hover:text-indigo-600"><i class="fas fa-times"></i></button>
@@ -118,10 +135,14 @@
                             <input type="number" id="inputHoras" step="0.1" class="w-full border rounded-lg p-2.5 font-bold text-right focus:ring-2 focus:ring-indigo-500 outline-none">
                         </div>
                     </div>
-                    <div>
-                        <label class="block text-xs font-bold text-slate-500 mb-1 uppercase">Descrição Completa</label>
-                        <input type="text" id="inputDesc" class="w-full border rounded-lg p-2.5 focus:ring-2 focus:ring-indigo-500 outline-none">
-                    </div>
+                        <div>
+                            <label class="block text-xs font-bold text-slate-500 mb-1 uppercase">Nome</label>
+                            <input type="text" id="inputNomeLegenda" class="w-full border rounded-lg p-2.5 focus:ring-2 focus:ring-indigo-500 outline-none">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-slate-500 mb-1 uppercase">Descrição</label>
+                            <input type="text" id="inputDescLegenda" class="w-full border rounded-lg p-2.5 focus:ring-2 focus:ring-indigo-500 outline-none text-sm text-slate-600">
+                        </div>
                     
                     <div class="pt-2 border-t mt-2">
                         <span class="block text-xs font-bold text-slate-400 mb-3 uppercase">Personalização de Cores</span>
@@ -152,8 +173,7 @@
             </div>
         </div>
 
-        <!-- Modal Seção -->
-        <div id="modalSecao" class="modal-overlay">
+        <div id="modalSecao" class="modal-overlay px-4">
             <div class="modal-content">
                 <div class="p-6 border-b flex justify-between items-center bg-emerald-50 rounded-t-xl">
                     <h3 class="font-bold text-lg text-emerald-900" id="modalTitleSecao">Nova Seção</h3>
@@ -177,9 +197,9 @@
         </div>
 
         <!-- Modal Militar -->
-        <div id="modalMilitar" class="modal-overlay">
-            <div class="modal-content">
-                <div class="p-6 border-b flex justify-between items-center">
+        <div id="modalMilitar" class="modal-overlay px-4">
+            <div class="modal-content max-h-[90vh] overflow-y-auto">
+                <div class="p-6 border-b flex justify-between items-center bg-slate-50 rounded-t-xl">
                     <h3 class="font-bold text-lg" id="modalTitle">Novo Militar</h3>
                     <button onclick="closeModalMilitar()" class="text-gray-400 hover:text-gray-600"><i class="fas fa-times"></i></button>
                 </div>
@@ -307,43 +327,107 @@
             </div>
         </div>
 
+        <!-- Tab Dashboard -->
+        <section id="dashboard" class="tab-content flex-col h-full w-full p-2 md:p-4 hidden overflow-y-auto">
+            <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 bg-white p-4 rounded-xl shadow-sm border border-slate-200 gap-4">
+                <div class="flex items-center gap-3">
+                    <div class="bg-purple-600 text-white p-2 rounded-lg">
+                        <i class="fas fa-chart-pie"></i>
+                    </div>
+                    <div>
+                        <h2 class="text-xl font-black text-slate-800 leading-tight">DASHBOARD ESTATÍSTICO</h2>
+                        <p class="text-xs text-slate-500 font-medium">Visão geral e métricas de preenchimento</p>
+                    </div>
+                </div>
+                <div class="flex items-center gap-2 bg-slate-100 p-1 rounded-lg">
+                     <div class="flex items-center gap-2 px-2 border-r border-slate-300 mr-2">
+                        <label class="text-xs font-bold text-slate-500">Ref. Presença:</label>
+                        <input type="date" id="dashDateRef" onchange="renderDashboard()" class="bg-transparent text-sm font-bold text-slate-700 outline-none w-32 cursor-pointer">
+                    </div>
+                    <button onclick="changeMonth(-1)" class="w-8 h-8 flex items-center justify-center hover:bg-white rounded shadow-sm text-slate-600 hidden"><i class="fas fa-chevron-left"></i></button>
+                    <select id="selMesDashboard" onchange="renderDashboard()" class="bg-transparent border-none text-sm font-bold w-40 text-center outline-none hidden"></select>
+                    <button onclick="changeMonth(1)" class="w-8 h-8 flex items-center justify-center hover:bg-white rounded shadow-sm text-slate-600 hidden"><i class="fas fa-chevron-right"></i></button>
+                </div>
+            </div>
+
+            <h3 class="font-bold text-slate-700 mb-4 px-1 flex justify-between items-center">
+                <span>Progresso por Seção</span>
+                
+                <div class="relative w-64 group inline-block">
+                    <button class="w-full h-8 border rounded-lg px-4 flex items-center justify-between text-xs text-slate-600 font-bold bg-white hover:bg-slate-50 relative z-20 shadow-sm" type="button">
+                        <span>Filtrar Seções</span>
+                        <i class="fas fa-chevron-down text-xs ml-2"></i>
+                    </button>
+                    <div id="filterSecoesContainerDashboard" class="hidden absolute top-full right-0 mt-2 w-64 bg-white border border-slate-200 shadow-xl rounded-lg p-3 z-50 transition-all max-h-60 overflow-y-auto">
+                        <!-- Populated by JS -->
+                    </div>
+                </div>
+            </h3>
+            
+            <div class="bg-white rounded-xl shadow border border-slate-200 overflow-hidden">
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm text-left whitespace-nowrap">
+                        <thead class="bg-slate-50 text-slate-500 font-bold uppercase text-xs border-b">
+                            <tr>
+                                <th class="px-6 py-4">Seção</th>
+                                <th class="px-6 py-4 text-center">Presentes</th>
+                                <th class="px-6 py-4 text-center">Preenchidos</th>
+                                <th class="px-6 py-4 text-center">Total Militares</th>
+                                <th class="px-6 py-4 text-center">% Presente</th>
+                                <th class="px-6 py-4 text-center">% Preenchido</th>
+                            </tr>
+                        </thead>
+                        <tbody id="dashboardTableBody" class="divide-y divide-slate-100">
+                            <!-- Populated by JS -->
+                        </tbody>
+                        <tfoot class="bg-slate-50 font-bold text-slate-800 border-t" id="dashboardTableFoot">
+                            <!-- Populated by JS -->
+                        </tfoot>
+                    </table>
+                </div>
+            </div>
+        </section>
+
         <!-- Tab Escala -->
-        <section id="escala" class="tab-content active flex-col h-full w-full p-4">
-            <div class="flex flex-col md:flex-row justify-between items-center mb-4 bg-white p-4 rounded-xl shadow-sm border border-slate-200 gap-4">
+        <section id="escala" class="tab-content active flex-col h-full w-full p-2 md:p-4 overflow-y-auto">
+            <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 bg-white p-4 rounded-xl shadow-sm border border-slate-200 gap-4">
                 <div class="flex items-center gap-3">
                     <div class="bg-blue-600 text-white p-2 rounded-lg">
                         <i class="fas fa-table"></i>
                     </div>
                     <div>
-                        <h2 class="text-xl font-black text-slate-800 leading-tight">CONTROLE DE FREQUÊNCIA</h2>
+                        <h2 class="text-xl font-black text-slate-800 leading-tight">ESCALA DE SERVIÇO</h2>
                         <p class="text-xs text-slate-500 font-medium">Gerenciamento de escalas e horas</p>
                     </div>
                 </div>
-                <div class="flex items-center gap-2 bg-slate-100 p-1 rounded-lg">
+                <div class="flex items-center justify-between w-full md:w-auto gap-2 bg-slate-100 p-1 rounded-lg">
                     <button onclick="changeMonth(-1)" class="w-8 h-8 flex items-center justify-center hover:bg-white rounded shadow-sm text-slate-600"><i class="fas fa-chevron-left"></i></button>
-                    <select id="selMes" onchange="renderEscala()" class="bg-transparent border-none text-sm font-bold w-40 text-center outline-none"></select>
+                    <select id="selMes" onchange="renderEscala()" class="bg-transparent border-none text-sm font-bold w-40 text-center outline-none flex-1 md:flex-none"></select>
                     <button onclick="changeMonth(1)" class="w-8 h-8 flex items-center justify-center hover:bg-white rounded shadow-sm text-slate-600"><i class="fas fa-chevron-right"></i></button>
                 </div>
             </div>
             
             <div class="bg-white rounded-xl shadow border border-slate-200 overflow-hidden flex-1 flex flex-col">
-                <div class="p-4 border-b flex gap-4">
+                <div class="p-4 border-b flex flex-col md:flex-row gap-4">
                     <div class="relative flex-1">
-                        <i class="fas fa-search absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"></i>
-                        <input type="text" id="searchInput" oninput="renderEscala()" placeholder="Pesquisar..." class="w-full pl-10 pr-4 py-2 rounded-lg border border-slate-200 focus:ring-2 focus:ring-blue-500 outline-none text-sm">
+                        <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
+                        <input type="text" id="searchInput" oninput="renderEscala()" placeholder="Pesquisar..." class="w-full pl-9 pr-4 py-2 rounded-lg border border-slate-200 focus:ring-2 focus:ring-blue-500 outline-none text-sm">
                     </div>
-                    <div class="relative w-64 group">
-                        <button class="w-full h-full border rounded-lg px-4 py-2 flex items-center justify-between text-sm text-slate-600 font-bold bg-white hover:bg-slate-50 relative z-20" type="button">
+                    <div class="relative w-full md:w-64 group">
+                        <button class="w-full h-10 md:h-full border rounded-lg px-4 flex items-center justify-between text-sm text-slate-600 font-bold bg-white hover:bg-slate-50 relative z-20" type="button">
                             <span>Filtrar Seções</span>
                             <i class="fas fa-chevron-down text-xs ml-2"></i>
                         </button>
-                        <div id="filterSecoesContainer" class="hidden absolute top-full right-0 mt-2 w-64 bg-white border border-slate-200 shadow-xl rounded-lg p-3 z-50 transition-all max-h-60 overflow-y-auto">
+                        <!-- Group-hover for desktop, click toggle for mobile? sticking to group-hover for simplicity or click based -->
+                        <!-- CSS :hover works on mobile as a tap usually. -->
+                        <div id="filterSecoesContainer" class="hidden group-hover:block absolute top-full right-0 mt-1 w-full md:w-64 bg-white border border-slate-200 shadow-xl rounded-lg p-3 z-50 transition-all max-h-60 overflow-y-auto">
                             <!-- Populated by JS -->
                         </div>
                     </div>
                 </div>
-                <div class="overflow-auto flex-1">
-                    <table class="w-full border-collapse text-[11px] whitespace-nowrap">
+                <!-- Added overflow-x-auto for table responsiveness -->
+                <div class="overflow-x-auto flex-1 h-full relative w-full">
+                    <table class="w-full border-collapse text-[11px] whitespace-nowrap min-w-[800px]">
                         <thead id="headEscala" class="bg-slate-50 sticky top-0 shadow-sm z-40 h-10"></thead>
                         <tbody id="bodyEscala" class="divide-y divide-slate-100"></tbody>
                     </table>
@@ -352,36 +436,39 @@
         </section>
 
         <!-- Tab Horas Extras -->
-        <section id="horas-extras" class="tab-content flex-col h-full w-full p-4">
-            <div class="flex flex-col md:flex-row justify-between items-center mb-4 bg-white p-4 rounded-xl shadow-sm border border-slate-200 gap-4">
+        <section id="horas-extras" class="tab-content flex-col h-full w-full p-2 md:p-4 hidden overflow-y-auto">
+            <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 bg-white p-4 rounded-xl shadow-sm border border-slate-200 gap-4">
                 <div class="flex items-center gap-3">
                     <div class="bg-red-600 text-white p-2 rounded-lg">
                         <i class="fas fa-stopwatch"></i>
                     </div>
                     <div>
-                        <h2 class="text-xl font-black text-slate-800 leading-tight">CONTROLE DE HORAS EXTRAS</h2>
+                        <h2 class="text-xl font-black text-slate-800 leading-tight">HORAS EXTRAS</h2>
                         <p class="text-xs text-slate-500 font-medium">Bancos de horas e compensações</p>
                     </div>
                 </div>
-                <div class="flex items-center gap-2 bg-slate-100 p-1 rounded-lg">
+                <div class="flex items-center gap-2 bg-slate-100 p-1 rounded-lg w-full md:w-auto justify-between md:justify-start">
                     <button onclick="changeMonth(-1)" class="w-8 h-8 flex items-center justify-center hover:bg-white rounded shadow-sm text-slate-600"><i class="fas fa-chevron-left"></i></button>
-                    <!-- Uses same select ID, will be synced via JS or moved to common area? Problem: IDs must be unique -->
-                    <!-- We can reuse 'selMes' if it's visible. But tab content hides/shows.
-                         Actually, 'selMes' is inside '#escala'. We need a new selector for this tab or move selector to a global header?
-                         Let's create a new one 'selMesExtras' for simplicity and sync them or separate them.
-                         For now, separate independent selector.
-                    -->
-                    <select id="selMesExtras" onchange="renderHorasExtras()" class="bg-transparent border-none text-sm font-bold w-40 text-center outline-none"></select>
+                    <select id="selMesExtras" onchange="renderHorasExtras()" class="bg-transparent border-none text-sm font-bold w-40 text-center outline-none flex-1 md:flex-none"></select>
                     <button onclick="changeMonth(1)" class="w-8 h-8 flex items-center justify-center hover:bg-white rounded shadow-sm text-slate-600"><i class="fas fa-chevron-right"></i></button>
                 </div>
             </div>
 
             <div class="bg-white rounded-xl shadow border border-slate-200 overflow-hidden flex-1 flex flex-col">
-                <div class="p-4 border-b">
-                     <div class="relative">
+                <div class="p-4 border-b flex flex-col md:flex-row gap-4">
+                     <div class="relative flex-1 w-full">
                         <i class="fas fa-search absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"></i>
                          <!-- New ID searchInputExtras -->
                         <input type="text" id="searchInputExtras" oninput="renderHorasExtras()" placeholder="Pesquisar..." class="w-full pl-10 pr-4 py-2 rounded-lg border border-slate-200 focus:ring-2 focus:ring-red-500 outline-none text-sm">
+                    </div>
+                    <div class="relative w-64 group">
+                        <button id="btnFilterExtras" class="w-full h-full border rounded-lg px-4 py-2 flex items-center justify-between text-sm text-slate-600 font-bold bg-white hover:bg-slate-50 relative z-20" type="button">
+                            <span>Filtrar Seções</span>
+                            <i class="fas fa-chevron-down text-xs ml-2"></i>
+                        </button>
+                        <div id="filterSecoesContainerExtras" class="hidden absolute top-full right-0 mt-2 w-64 bg-white border border-slate-200 shadow-xl rounded-lg p-3 z-50 transition-all max-h-60 overflow-y-auto">
+                            <!-- Populated by JS -->
+                        </div>
                     </div>
                 </div>
                 <div class="overflow-auto flex-1">
@@ -394,9 +481,9 @@
         </section>
 
         <!-- Tab Glossario -->
-        <section id="glossario" class="tab-content flex-col h-full w-full p-8 overflow-y-auto">
+        <section id="glossario" class="tab-content flex-col h-full w-full p-4 md:p-8 overflow-y-auto hidden">
             <div class="max-w-4xl mx-auto w-full">
-                <div class="flex items-center gap-3 mb-8 pb-4 border-b">
+                <div class="flex items-center gap-3 mb-6 pb-4 border-b">
                     <div class="bg-emerald-600 text-white p-3 rounded-xl">
                         <i class="fas fa-clock fa-lg"></i>
                     </div>
@@ -407,8 +494,8 @@
         </section>
 
         <!-- Tab Config -->
-        <section id="config" class="tab-content flex-col h-full w-full p-8 overflow-y-auto">
-            <div class="max-w-5xl mx-auto w-full space-y-8" id="configContent">
+        <section id="config" class="tab-content flex-col h-full w-full p-4 md:p-8 overflow-y-auto hidden">
+            <div class="max-w-5xl mx-auto w-full space-y-6 md:space-y-8" id="configContent">
                 
                 <!-- Data Management Header -->
                  <div class="bg-indigo-900 text-white p-6 rounded-2xl shadow-lg flex justify-between items-center bg-[url('https://www.transparenttextures.com/patterns/dark-matter.png')]">
@@ -424,21 +511,71 @@
                 </div>
 
                 <!-- CSV / Excel Import Export Section -->
-                <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex justify-between items-center">
-                    <div>
-                        <h3 class="font-bold text-gray-800">Planilhas de Serviço (Excel/CSV)</h3>
-                        <p class="text-xs text-gray-500">Exporte a grade atual para Excel ou importe dados editados.</p>
+                <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+                    <div class="flex justify-between items-center">
+                        <div>
+                            <h3 class="font-bold text-gray-800">Planilhas de Serviço (Excel/CSV)</h3>
+                            <p class="text-xs text-gray-500">Exporte a grade atual para Excel ou importe dados editados.</p>
+                        </div>
+                        <div class="flex gap-3">
+                            <button onclick="exportCSV()" class="bg-green-600 hover:bg-green-500 text-white px-4 py-2 rounded-lg font-bold shadow transition flex items-center gap-2">
+                                <i class="fas fa-file-csv"></i> Exportar CSV
+                            </button>
+                            <button onclick="triggerImportCSV()" class="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg font-bold shadow transition flex items-center gap-2">
+                                <i class="fas fa-file-upload"></i> Importar CSV
+                            </button>
+                            <input type="file" id="fileInputCSV" class="hidden" accept=".csv">
+                        </div>
                     </div>
-                    <div class="flex gap-3">
-                        <button onclick="exportCSV()" class="bg-green-600 hover:bg-green-500 text-white px-4 py-2 rounded-lg font-bold shadow transition flex items-center gap-2">
-                            <i class="fas fa-file-csv"></i> Exportar CSV
-                        </button>
-                        <button onclick="triggerImportCSV()" class="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg font-bold shadow transition flex items-center gap-2">
-                            <i class="fas fa-file-upload"></i> Importar CSV
-                        </button>
-                        <input type="file" id="fileInputCSV" class="hidden" accept=".csv">
+                </div>
+
+                <!-- Import Cadastral Data Section -->
+                <div class="bg-gradient-to-r from-blue-50 to-indigo-50 p-8 rounded-2xl shadow-sm border-2 border-blue-200">
+                    <div class="flex justify-between items-start mb-6">
+                        <div>
+                            <h3 class="text-lg font-bold text-blue-900 flex items-center gap-2">
+                                <i class="fas fa-upload text-blue-600"></i>
+                                Importar Dados de Cadastro
+                            </h3>
+                            <p class="text-sm text-blue-700 mt-1">Importe arquivos CSV para popular automaticamente Seções, Legendas e Militares no sistema.</p>
+                        </div>
                     </div>
-                 </div>
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <!-- Import Seções -->
+                        <div class="bg-white p-4 rounded-xl border border-blue-200 hover:border-blue-400 transition">
+                            <h4 class="font-bold text-slate-700 mb-3 flex items-center gap-2">
+                                <i class="fas fa-building text-blue-600"></i> Seções
+                            </h4>
+                            <p class="text-xs text-slate-500 mb-4">Colunas: SIGLA, NOME/DESCRIÇÃO</p>
+                            <button onclick="openModalImportSecoes()" class="w-full bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-lg font-bold text-sm shadow transition">
+                                <i class="fas fa-file-upload mr-2"></i> Importar CSV
+                            </button>
+                        </div>
+
+                        <!-- Import Legendas -->
+                        <div class="bg-white p-4 rounded-xl border border-blue-200 hover:border-blue-400 transition">
+                            <h4 class="font-bold text-slate-700 mb-3 flex items-center gap-2">
+                                <i class="fas fa-palette text-indigo-600"></i> Legendas
+                            </h4>
+                            <p class="text-xs text-slate-500 mb-4">Colunas: SIGLA, HORA, DESCRIÇÃO</p>
+                            <button onclick="openModalImportLegendas()" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-2 rounded-lg font-bold text-sm shadow transition">
+                                <i class="fas fa-file-upload mr-2"></i> Importar CSV
+                            </button>
+                        </div>
+
+                        <!-- Import Militares -->
+                        <div class="bg-white p-4 rounded-xl border border-blue-200 hover:border-blue-400 transition">
+                            <h4 class="font-bold text-slate-700 mb-3 flex items-center gap-2">
+                                <i class="fas fa-users text-emerald-600"></i> Militares
+                            </h4>
+                            <p class="text-xs text-slate-500 mb-4">Colunas: Matricula, PG, Nome, etc</p>
+                            <button onclick="openModalImportMilitares()" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-2 rounded-lg font-bold text-sm shadow transition">
+                                <i class="fas fa-file-upload mr-2"></i> Importar CSV
+                            </button>
+                        </div>
+                    </div>
+                </div>
 
                  <!-- Legendas -->
                 <div class="bg-white p-8 rounded-2xl shadow-sm border border-slate-200">
@@ -559,6 +696,100 @@
                 <button onclick="closeModalCarga()" class="px-3 py-2 text-slate-500 font-bold text-xs hover:bg-slate-100 rounded transition">Cancelar</button>
                 <button onclick="clearCargaPeriod()" class="px-3 py-2 text-red-500 font-bold text-xs hover:bg-red-50 rounded transition">Limpar Período</button>
                 <button onclick="saveCargaPeriod()" class="px-4 py-2 bg-blue-600 text-white font-bold text-xs rounded hover:bg-blue-700 shadow-lg shadow-blue-200 transition">Aplicar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Import Seções -->
+    <div id="modalImportSecoes" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[80] hidden flex items-center justify-center opacity-0 transition-opacity duration-300">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md transform scale-95 transition-transform duration-300">
+            <div class="p-6 border-b border-slate-200 flex justify-between items-center">
+                <div>
+                    <h3 class="font-bold text-lg text-slate-700 flex items-center gap-2">
+                        <i class="fas fa-building text-blue-600"></i> Importar Seções
+                    </h3>
+                    <p class="text-xs text-slate-500 mt-1">Colunas: SIGLA | NOME/DESCRIÇÃO</p>
+                </div>
+                <button onclick="closeModalImportSecoes()" class="text-slate-400 hover:text-red-500"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="p-6 space-y-4">
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 uppercase mb-2">Selecione o arquivo CSV</label>
+                    <input type="file" id="fileImportSecoes" accept=".csv,.tsv" class="w-full border rounded-lg p-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none">
+                    <p class="text-[10px] text-slate-400 mt-2">Use TAB como separador ou vírgula</p>
+                </div>
+                <div id="previewSecoes" class="hidden bg-slate-50 p-3 rounded border border-slate-200 max-h-40 overflow-y-auto">
+                    <p class="text-xs font-bold text-slate-600 mb-2">Prévia dos dados:</p>
+                    <div id="previewSecoesContent" class="text-xs text-slate-700"></div>
+                </div>
+            </div>
+            <div class="p-4 bg-slate-50 rounded-b-2xl flex justify-end gap-2">
+                <button onclick="closeModalImportSecoes()" class="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-200 rounded-lg">Cancelar</button>
+                <button onclick="importSecoesCSV()" class="px-4 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow">Importar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Import Legendas -->
+    <div id="modalImportLegendas" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[80] hidden flex items-center justify-center opacity-0 transition-opacity duration-300">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md transform scale-95 transition-transform duration-300">
+            <div class="p-6 border-b border-slate-200 flex justify-between items-center">
+                <div>
+                    <h3 class="font-bold text-lg text-slate-700 flex items-center gap-2">
+                        <i class="fas fa-palette text-indigo-600"></i> Importar Legendas
+                    </h3>
+                    <p class="text-xs text-slate-500 mt-1">Colunas: SIGLA | HORA | DESCRIÇÃO</p>
+                </div>
+                <button onclick="closeModalImportLegendas()" class="text-slate-400 hover:text-red-500"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="p-6 space-y-4">
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 uppercase mb-2">Selecione o arquivo CSV</label>
+                    <input type="file" id="fileImportLegendas" accept=".csv,.tsv" class="w-full border rounded-lg p-3 text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
+                    <p class="text-[10px] text-slate-400 mt-2">Use TAB como separador ou vírgula</p>
+                </div>
+                <div id="previewLegendas" class="hidden bg-slate-50 p-3 rounded border border-slate-200 max-h-40 overflow-y-auto">
+                    <p class="text-xs font-bold text-slate-600 mb-2">Prévia dos dados:</p>
+                    <div id="previewLegendasContent" class="text-xs text-slate-700"></div>
+                </div>
+            </div>
+            <div class="p-4 bg-slate-50 rounded-b-2xl flex justify-end gap-2">
+                <button onclick="closeModalImportLegendas()" class="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-200 rounded-lg">Cancelar</button>
+                <button onclick="importLegendasCSV()" class="px-4 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg shadow">Importar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Import Militares -->
+    <div id="modalImportMilitares" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[80] hidden flex items-center justify-center opacity-0 transition-opacity duration-300">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md transform scale-95 transition-transform duration-300">
+            <div class="p-6 border-b border-slate-200 flex justify-between items-center">
+                <div>
+                    <h3 class="font-bold text-lg text-slate-700 flex items-center gap-2">
+                        <i class="fas fa-users text-emerald-600"></i> Importar Militares
+                    </h3>
+                    <p class="text-xs text-slate-500 mt-1">Colunas: Matricula, PG, Nome Completo, Seçao Sigla, etc</p>
+                </div>
+                <button onclick="closeModalImportMilitares()" class="text-slate-400 hover:text-red-500"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="p-6 space-y-4">
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 uppercase mb-2">Selecione o arquivo CSV</label>
+                    <input type="file" id="fileImportMilitares" accept=".csv,.tsv" class="w-full border rounded-lg p-3 text-sm focus:ring-2 focus:ring-emerald-500 outline-none">
+                    <p class="text-[10px] text-slate-400 mt-2">Use TAB como separador ou vírgula</p>
+                </div>
+                <div id="previewMilitares" class="hidden bg-slate-50 p-3 rounded border border-slate-200 max-h-40 overflow-y-auto">
+                    <p class="text-xs font-bold text-slate-600 mb-2">Prévia dos dados:</p>
+                    <div id="previewMilitaresContent" class="text-xs text-slate-700"></div>
+                </div>
+                <div class="bg-emerald-50 p-3 rounded border border-emerald-200 text-emerald-800 text-[10px]">
+                    <i class="fas fa-info-circle mr-2"></i>
+                    <strong>Nota:</strong> Usuários com "Acesso ao Sistema = TRUE" terão contas criadas automaticamente.
+                </div>
+            </div>
+            <div class="p-4 bg-slate-50 rounded-b-2xl flex justify-end gap-2">
+                <button onclick="closeModalImportMilitares()" class="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-200 rounded-lg">Cancelar</button>
+                <button onclick="importMilitaresCSV()" class="px-4 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg shadow">Importar</button>
             </div>
         </div>
     </div>

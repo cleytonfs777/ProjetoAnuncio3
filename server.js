@@ -50,6 +50,7 @@ function initDb() {
 
         db.run(`CREATE TABLE IF NOT EXISTS legendas (
             sigla TEXT PRIMARY KEY,
+            nome TEXT,
             desc TEXT,
             color TEXT,
             text TEXT,
@@ -91,9 +92,21 @@ function initDb() {
         )`);
         
         console.log("Tables initialized.");
-        initUsers();
-        initAdminMilitar();
-        checkMigration();
+        
+        // Migration: Check if legendas table needs update (rename desc -> nome, add desc)
+        db.all("PRAGMA table_info(legendas)", (err, columns) => {
+            if (!err && columns.length > 0 && !columns.some(c => c.name === 'nome')) {
+                console.log("Migrating legendas schema...");
+                db.serialize(() => {
+                    db.run("ALTER TABLE legendas RENAME COLUMN desc TO nome");
+                    db.run("ALTER TABLE legendas ADD COLUMN desc TEXT");
+                });
+            }
+            
+            initUsers();
+            initAdminMilitar();
+            checkMigration();
+        });
     });
 }
 
@@ -169,32 +182,46 @@ function migrateData(jsonData) {
     db.serialize(() => {
         db.run("BEGIN TRANSACTION");
         
+        // Clear tables that rely on full-state sync to handle deletions
+        db.run("DELETE FROM secoes");
+        db.run("DELETE FROM legendas");
+        // db.run("DELETE FROM militares"); // Militares managed via specific API, keep upsert safety
+        db.run("DELETE FROM escala");
+        db.run("DELETE FROM horas_extras");
+        db.run("DELETE FROM cargas_diarias");
+
         // Secoes
-        const stmtSec = db.prepare("INSERT OR REPLACE INTO secoes (sigla, desc) VALUES (?, ?)");
+        const stmtSec = db.prepare("INSERT INTO secoes (sigla, desc) VALUES (?, ?)");
         (jsonData.secoes || []).forEach(s => stmtSec.run(s.sigla, s.desc));
         stmtSec.finalize();
 
         // Legendas
-        const stmtLeg = db.prepare("INSERT OR REPLACE INTO legendas (sigla, desc, color, text, horas) VALUES (?, ?, ?, ?, ?)");
-        (jsonData.legendas || []).forEach(l => stmtLeg.run(l.sigla, l.desc, l.color, l.text, l.horas));
+        const stmtLeg = db.prepare("INSERT INTO legendas (sigla, nome, desc, color, text, horas) VALUES (?, ?, ?, ?, ?, ?)");
+        (jsonData.legendas || []).forEach(l => {
+            const nome = l.nome || l.desc;
+            const desc = l.nome ? l.desc : '';
+            stmtLeg.run(l.sigla, nome, desc, l.color, l.text, l.horas);
+        });
         stmtLeg.finalize();
 
-        // Militares
+        // Militares (Keep upsert logic)
         const stmtMil = db.prepare("INSERT OR REPLACE INTO militares (id, num, nome, secao, posto, typeHora) VALUES (?, ?, ?, ?, ?, ?)");
         (jsonData.militares || []).forEach(m => stmtMil.run(m.id, m.num, m.nome, m.secao, m.posto, m.typeHora));
         stmtMil.finalize();
 
         // Escala
-        const stmtEsc = db.prepare("INSERT OR REPLACE INTO escala (militar_id, mes, dia, sigla) VALUES (?, ?, ?, ?)");
+        const stmtEsc = db.prepare("INSERT INTO escala (militar_id, mes, dia, sigla) VALUES (?, ?, ?, ?)");
         Object.keys(jsonData.escala || {}).forEach(key => {
             const [id, mes, dia] = key.split('-').map(Number);
             const sigla = jsonData.escala[key];
-            stmtEsc.run(id, mes, dia, sigla);
+            if(sigla && sigla.trim() !== '') {
+                stmtEsc.run(id, mes, dia, sigla);
+            }
         });
         stmtEsc.finalize();
 
         // Horas Extras
-        const stmtHex = db.prepare("INSERT OR REPLACE INTO horas_extras (militar_id, mes, dia, val, obs) VALUES (?, ?, ?, ?, ?)");
+        const stmtHex = db.prepare("INSERT INTO horas_extras (militar_id, mes, dia, val, obs) VALUES (?, ?, ?, ?, ?)");
         Object.keys(jsonData.horasExtras || {}).forEach(key => {
             const [id, mes, dia] = key.split('-').map(Number);
             const entry = jsonData.horasExtras[key];
@@ -210,15 +237,10 @@ function migrateData(jsonData) {
         });
         stmtHex.finalize();
 
-        // Cargas Diarias (Excecoes)
-        const stmtCarga = db.prepare("INSERT OR REPLACE INTO cargas_diarias (militar_id, mes, dia, type) VALUES (?, ?, ?, ?)");
-        Object.keys(jsonData.cargasDiarias || {}).forEach(key => {
-            const [id, mes, dia] = key.split('-').map(Number);
-            const type = jsonData.cargasDiarias[key];
-            stmtCarga.run(id, mes, dia, type);
-        });
-        stmtCarga.finalize();
-
+        // Cargas Diarias (Excecoes) - REMOVED FUNCTIONALITY
+        // Cleaning up legacy data just in case
+        db.run("DELETE FROM cargas_diarias");
+        
         db.run("COMMIT", () => {
             console.log("Migration complete.");
         });
@@ -546,6 +568,265 @@ app.delete('/api/users/:id', (req, res) => {
     });
 });
 
+// --- CSV IMPORT ENDPOINTS ---
+
+// Helper function to parse CSV content
+function parseCSV(csvContent) {
+    const lines = csvContent.trim().split(/\r?\n/);
+    if (lines.length === 0) return [];
+
+    // Detect separator from first line
+    const firstLine = lines[0];
+    let separator = '\t'; // Default to tab
+    if (!firstLine.includes('\t') && firstLine.includes(';')) separator = ';';
+    else if (!firstLine.includes('\t') && !firstLine.includes(';') && firstLine.includes(',')) separator = ',';
+
+    // Helper to clean quotes
+    const cleanBox = (str) => str ? str.trim().replace(/^"|"$/g, '') : '';
+
+    // Parse header
+    const headers = firstLine.split(separator).map(cleanBox);
+    
+    // Parse rows
+    const data = [];
+    for (let i = 1; i < lines.length; i++) {
+        if (!lines[i].trim()) continue;
+        const values = lines[i].split(separator).map(cleanBox);
+        const row = {};
+        headers.forEach((header, index) => {
+            row[header] = values[index] || '';
+        });
+        data.push(row);
+    }
+    
+    return data;
+}
+
+// Import Seções (Sections)
+app.post('/api/import/secoes', (req, res) => {
+    const requestRole = req.headers['x-role'];
+    if (requestRole !== 'ADMIN') {
+        return res.status(403).json({ error: 'Acesso negado. Apenas ADMIN pode importar dados.' });
+    }
+
+    const { csvContent } = req.body;
+    if (!csvContent) {
+        return res.status(400).json({ error: 'Nenhum conteúdo CSV fornecido.' });
+    }
+
+    try {
+        const data = parseCSV(csvContent);
+        
+        db.serialize(() => {
+            db.run("BEGIN TRANSACTION");
+            
+            // Only insert if SIGLA doesn't exist (INSERT OR IGNORE)
+            const stmt = db.prepare("INSERT OR IGNORE INTO secoes (sigla, desc) VALUES (?, ?)");
+            let successCount = 0;
+            let errorCount = 0;
+
+            data.forEach(row => {
+                const sigla = row['SIGLA'] || row['sigla'];
+                const desc = row['NOME/DESCRIÇÃO'] || row['nome'] || row['DESCRIÇÃO'];
+                
+                if (sigla && desc) {
+                    stmt.run(sigla, desc, (err) => {
+                        if (!err) successCount++;
+                        else errorCount++;
+                    });
+                } else {
+                    errorCount++;
+                }
+            });
+
+            stmt.finalize();
+            
+            db.run("COMMIT", (err) => {
+                if (err) {
+                    return res.status(500).json({ error: "Erro ao salvar seções: " + err.message });
+                }
+                res.json({ success: true, successCount, errorCount, message: `${successCount} seção(ões) importada(s), ${errorCount} erro(s)` });
+            });
+        });
+    } catch (err) {
+        res.status(400).json({ error: "Erro ao processar CSV: " + err.message });
+    }
+});
+
+// Import Legendas (Legends/Categories)
+app.post('/api/import/legendas', (req, res) => {
+    const requestRole = req.headers['x-role'];
+    if (requestRole !== 'ADMIN') {
+        return res.status(403).json({ error: 'Acesso negado. Apenas ADMIN pode importar dados.' });
+    }
+
+    const { csvContent } = req.body;
+    if (!csvContent) {
+        return res.status(400).json({ error: 'Nenhum conteúdo CSV fornecido.' });
+    }
+
+    try {
+        const data = parseCSV(csvContent);
+        
+        db.serialize(() => {
+            db.run("BEGIN TRANSACTION");
+            
+            // Changed from INSERT OR REPLACE to INSERT OR IGNORE to only add new legends
+            const stmt = db.prepare("INSERT OR IGNORE INTO legendas (sigla, nome, desc, horas, color, text) VALUES (?, ?, ?, ?, ?, ?)");
+            let successCount = 0;
+            let errorCount = 0;
+
+            // Default color mapping for common categories
+            const defaultColors = {
+                'P': { color: '#dcfce7', text: '#166534' },
+                'FO': { color: '#dbeafe', text: '#1e40af' },
+                'F': { color: '#fef9c3', text: '#854d0e' },
+                'LM': { color: '#fee2e2', text: '#991b1b' },
+                'TAF': { color: '#fce7f3', text: '#be185d' },
+                'TPB': { color: '#e0e7ff', text: '#3730a3' },
+                'DSP': { color: '#fed7aa', text: '#9a3412' },
+                '4ESF': { color: '#c7d2fe', text: '#3730a3' }
+            };
+
+            data.forEach(row => {
+                const sigla = row['SIGLA'] || row['sigla'];
+                
+                let nome = row['NOME'] || row['nome'];
+                let desc = row['DESCRIÇÃO'] || row['desc'] || row['descricao'];
+                
+                // Fallback for old CSVs where DESCRIÇÃO was the main name
+                if (!nome && desc) {
+                    nome = desc;
+                    desc = '';
+                }
+
+                let horas = parseFloat(row['HORA'] || row['horas'] || '0');
+                
+                // Parse "8 ou 6" format
+                if (isNaN(horas) && row['HORA']) {
+                    if (row['HORA'].includes('8')) horas = 8;
+                    else if (row['HORA'].includes('6')) horas = 6;
+                }
+
+                const colors = defaultColors[sigla] || { color: '#e5e7eb', text: '#374151' };
+
+                if (sigla && nome) {
+                    stmt.run(sigla, nome, desc, horas, colors.color, colors.text, (err) => {
+                        if (!err) successCount++;
+                        else errorCount++;
+                    });
+                } else {
+                    errorCount++;
+                }
+            });
+
+            stmt.finalize();
+            
+            db.run("COMMIT", (err) => {
+                if (err) {
+                    return res.status(500).json({ error: "Erro ao salvar legendas: " + err.message });
+                }
+                res.json({ success: true, successCount, errorCount, message: `${successCount} legenda(s) importada(s), ${errorCount} erro(s)` });
+            });
+        });
+    } catch (err) {
+        res.status(400).json({ error: "Erro ao processar CSV: " + err.message });
+    }
+});
+
+// Import Militares (Military Personnel)
+app.post('/api/import/militares', (req, res) => {
+    const requestRole = req.headers['x-role'];
+    if (requestRole !== 'ADMIN') {
+        return res.status(403).json({ error: 'Acesso negado. Apenas ADMIN pode importar dados.' });
+    }
+
+    const { csvContent } = req.body;
+    if (!csvContent) {
+        return res.status(400).json({ error: 'Nenhum conteúdo CSV fornecido.' });
+    }
+
+    try {
+        const data = parseCSV(csvContent);
+        
+        // Anti-pattern fix: Do not use async reads inside a serialized loop with late async writes.
+        // Instead, read all existing IDs first, then filter, then write batch.
+        
+        db.all("SELECT num FROM militares", (err, rows) => {
+            if (err) {
+                return res.status(500).json({ error: "Erro ao ler banco de dados: " + err.message });
+            }
+            
+            const existingNums = new Set(rows.map(r => r.num));
+            let successCount = 0;
+            let errorCount = 0;
+            
+            db.serialize(() => {
+                db.run("BEGIN TRANSACTION");
+                
+                const stmtMil = db.prepare("INSERT INTO militares (num, nome, secao, posto, typeHora) VALUES (?, ?, ?, ?, ?)");
+                const stmtUser = db.prepare("INSERT OR IGNORE INTO users (username, password, role, name) VALUES (?, ?, ?, ?)");
+                
+                data.forEach(row => {
+                    const matricula = row['Matricula'] || row['matricula'];
+                    const nome = row['Nome Completo'] || row['nome'];
+                    const secaoSigla = row['Seçao Sigla'] || row['Seção Sigla'] || row['secao'];
+                    const posto = row['PG'] || row['pg'] || '';
+                    
+                    // Determine carga horaria default
+                    let cargaHoraria = row['Carga Horaria'] || row['carga_horaria'] || '8h';
+                    // Override for Civis: Always 8h
+                    if (posto && posto.toLowerCase().includes('civil')) {
+                        cargaHoraria = '8h';
+                    }
+
+                    const acessoSistema = row['Acesso ao Sistema'] || row['acesso'];
+                    const perfil = row['Perfil'] || row['perfil'] || 'Usuario';
+                    const senha = row['Senha'] || row['senha'] || 'cbmmg193';
+
+                    if (matricula && nome && secaoSigla) {
+                        if (!existingNums.has(matricula)) {
+                            stmtMil.run(matricula, nome, secaoSigla, posto, cargaHoraria, (err) => {
+                                if (err) errorCount++; 
+                                else successCount++;
+                            });
+                            
+                            // Add to Set to prevent duplicates within the same CSV
+                            existingNums.add(matricula); 
+                            
+                            // Create User if needed
+                            if (acessoSistema && (acessoSistema === 'TRUE' || acessoSistema === 'true' || acessoSistema === '1')) {
+                                const username = matricula.replace(/\D/g, ''); // Extract only digits
+                                stmtUser.run(username, senha, perfil.toUpperCase(), nome);
+                            }
+                        } else {
+                            // Already exists - maybe count as success if the goal is "ensure it exists"?
+                            // Typically "imported 0" implies nothing new was added. 
+                            // Let's count as error for "duplicate" or just ignore.
+                            // The user prefers "Import ignored" maybe?
+                            // Let's just track added.
+                        }
+                    } else {
+                        errorCount++;
+                    }
+                });
+
+                stmtMil.finalize();
+                stmtUser.finalize();
+                
+                db.run("COMMIT", (err) => {
+                    if (err) {
+                        return res.status(500).json({ error: "Erro ao salvar militares: " + err.message });
+                    }
+                    res.json({ success: true, successCount, errorCount, message: `${successCount} militar(es) importado(s), ${errorCount} erros/ignorados` });
+                });
+            });
+        });
+
+    } catch (err) {
+        res.status(400).json({ error: "Erro ao processar CSV: " + err.message });
+    }
+});
 
 app.listen(PORT, () => {
     console.log(`Server running on http://localhost:${PORT}`);

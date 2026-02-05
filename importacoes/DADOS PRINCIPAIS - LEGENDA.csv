@@ -1,0 +1,14 @@
+SIGLA,HORA,DESCRIÇÃO
+TPB,8,TPB
+TAF,6,Realização somente do TAF no CTP
+F,0,Férias
+P,8 ou 6,Presencial
+FO,0,Folga
+DSP,8,Diligênica
+4ESF,12,4º Esforço
+C,8,Curso
+PSO,0,PSO
+INT,8,Intervenção
+AUL,0,Aula (ministrando)
+OD,0,Outros Destinos
+LM,0,Licença Médica
