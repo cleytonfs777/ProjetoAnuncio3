@@ -411,7 +411,7 @@
                 <div class="p-4 border-b flex flex-col md:flex-row gap-4">
                     <div class="relative flex-1">
                         <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
-                        <input type="text" id="searchInput" oninput="renderEscala()" placeholder="Pesquisar..." class="w-full pl-9 pr-4 py-2 rounded-lg border border-slate-200 focus:ring-2 focus:ring-blue-500 outline-none text-sm">
+                        <input type="text" id="searchInput" oninput="renderEscalaDebounced()" placeholder="Pesquisar..." class="w-full pl-9 pr-4 py-2 rounded-lg border border-slate-200 focus:ring-2 focus:ring-blue-500 outline-none text-sm">
                     </div>
                     <div class="relative w-full md:w-64 group">
                         <button class="w-full h-10 md:h-full border rounded-lg px-4 flex items-center justify-between text-sm text-slate-600 font-bold bg-white hover:bg-slate-50 relative z-20" type="button">
@@ -431,6 +431,14 @@
                         <thead id="headEscala" class="bg-slate-50 sticky top-0 shadow-sm z-40 h-10"></thead>
                         <tbody id="bodyEscala" class="divide-y divide-slate-100"></tbody>
                     </table>
+                </div>
+                <!-- Pagination Footer -->
+                <div id="paginationEscala" class="p-3 border-t bg-slate-50 flex items-center justify-between text-xs font-bold text-slate-600">
+                    <span id="pageInfoEscala">Página 1 de 1</span>
+                    <div class="flex gap-2">
+                        <button onclick="changePageEscala(-1)" class="px-3 py-1 bg-white border rounded shadow hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed">Anterior</button>
+                        <button onclick="changePageEscala(1)" class="px-3 py-1 bg-white border rounded shadow hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed">Próxima</button>
+                    </div>
                 </div>
             </div>
         </section>
@@ -459,7 +467,7 @@
                      <div class="relative flex-1 w-full">
                         <i class="fas fa-search absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"></i>
                          <!-- New ID searchInputExtras -->
-                        <input type="text" id="searchInputExtras" oninput="renderHorasExtras()" placeholder="Pesquisar..." class="w-full pl-10 pr-4 py-2 rounded-lg border border-slate-200 focus:ring-2 focus:ring-red-500 outline-none text-sm">
+                        <input type="text" id="searchInputExtras" oninput="renderHorasExtrasDebounced()" placeholder="Pesquisar..." class="w-full pl-10 pr-4 py-2 rounded-lg border border-slate-200 focus:ring-2 focus:ring-red-500 outline-none text-sm">
                     </div>
                     <div class="relative w-64 group">
                         <button id="btnFilterExtras" class="w-full h-full border rounded-lg px-4 py-2 flex items-center justify-between text-sm text-slate-600 font-bold bg-white hover:bg-slate-50 relative z-20" type="button">
@@ -476,6 +484,14 @@
                         <thead id="headHorasExtras" class="bg-slate-50 sticky top-0 shadow-sm z-40 h-10"></thead>
                         <tbody id="bodyHorasExtras" class="divide-y divide-slate-100"></tbody>
                     </table>
+                </div>
+                <!-- Pagination Footer Extras -->
+                <div id="paginationExtras" class="p-3 border-t bg-slate-50 flex items-center justify-between text-xs font-bold text-slate-600">
+                    <span id="pageInfoExtras">Página 1 de 1</span>
+                    <div class="flex gap-2">
+                        <button onclick="changePageExtras(-1)" class="px-3 py-1 bg-white border rounded shadow hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed">Anterior</button>
+                        <button onclick="changePageExtras(1)" class="px-3 py-1 bg-white border rounded shadow hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed">Próxima</button>
+                    </div>
                 </div>
             </div>
         </section>

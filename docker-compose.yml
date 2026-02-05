@@ -1,0 +1,12 @@
+services:
+  bmtrack:
+    container_name: bmtrack-server
+    build: .
+    ports:
+      - "3000:3000"
+    volumes:
+      # Monta o diretório atual para persistência do SQLite e arquivos
+      - ./:/usr/src/app
+      # Previne que o node_modules local sobrescreva o do container
+      - /usr/src/app/node_modules
+    restart: always

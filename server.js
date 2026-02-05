@@ -2,6 +2,7 @@ const express = require('express');
 const sqlite3 = require('sqlite3').verbose();
 const cors = require('cors');
 const bodyParser = require('body-parser');
+const compression = require('compression');
 const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto'); // For simple token generation
@@ -11,6 +12,7 @@ const PORT = 3000;
 const DB_PATH = path.join(__dirname, 'bm_control.db');
 
 // Middleware
+app.use(compression()); // Enable Gzip compression
 app.use(cors());
 app.use(bodyParser.json({ limit: '50mb' })); // Increase limit for large payloads
 app.use(express.static(__dirname)); // Serve static files from root

@@ -14,9 +14,33 @@ const DEFAULT_DB = {
     cargasDiarias: {}
 };
 
+// Pagination State
+let currentPageEscala = 1;
+let currentPageExtras = 1;
+const ITEMS_PER_PAGE = 20;
+
 const meses = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
 const API_URL = 'http://localhost:3000/api';
 let currentUser = null;
+
+// Utility: Debounce to prevent lag on rapid input
+function debounce(func, timeout = 300){
+  let timer;
+  return (...args) => {
+    clearTimeout(timer);
+    timer = setTimeout(() => { func.apply(this, args); }, timeout);
+  };
+}
+
+const renderEscalaDebounced = debounce(() => {
+    currentPageEscala = 1; // Reset to first page on search
+    renderEscala();
+});
+
+const renderHorasExtrasDebounced = debounce(() => {
+    currentPageExtras = 1; // Reset to first page on search
+    renderHorasExtras();
+});
 
 // Document Ready
 document.addEventListener('DOMContentLoaded', async () => {
@@ -494,6 +518,18 @@ function sortMilitares(a, b) {
     return rankB - rankA;
 }
 
+// ------ PAGINATION HANDLERS ------
+
+function changePageEscala(delta) {
+    currentPageEscala += delta;
+    renderEscala();
+}
+
+function changePageExtras(delta) {
+    currentPageExtras += delta;
+    renderHorasExtras();
+}
+
 // ------ ESCALA RENDERER ------
 
 function renderEscala() {
@@ -561,9 +597,30 @@ function renderEscala() {
         return matchName || matchNum || matchSecao || matchPosto;
     });
 
+    // --- Pagination Logic Escala ---
+    filteredMilitares.sort(sortMilitares);
+    
+    const totalItems = filteredMilitares.length;
+    const totalPages = Math.ceil(totalItems / ITEMS_PER_PAGE) || 1;
+    if (currentPageEscala > totalPages) currentPageEscala = totalPages;
+    if (currentPageEscala < 1) currentPageEscala = 1;
+    
+    const startIndex = (currentPageEscala - 1) * ITEMS_PER_PAGE;
+    const endIndex = startIndex + ITEMS_PER_PAGE;
+    const paginatedMilitares = filteredMilitares.slice(startIndex, endIndex);
+    
+    // Update UI Controls
+    const pageInfo = document.getElementById('pageInfoEscala');
+    if(pageInfo) pageInfo.textContent = `Página ${currentPageEscala} de ${totalPages}`;
+    
+    const btnPrev = document.querySelector('#paginationEscala button:first-child');
+    const btnNext = document.querySelector('#paginationEscala button:last-child');
+    if(btnPrev) btnPrev.disabled = currentPageEscala === 1;
+    if(btnNext) btnNext.disabled = currentPageEscala === totalPages;
+
     // Body Generation
     let body = "";
-    filteredMilitares.sort(sortMilitares).forEach((m, index) => {
+    paginatedMilitares.forEach((m, index) => {
         let totalHoras = 0;
         let statusHoje = null;
 
@@ -751,10 +808,31 @@ function renderHorasExtras() {
         return (m.nome.toLowerCase().includes(search) || m.num.includes(search) || m.secao.toLowerCase().includes(search));
     });
 
+    // --- Pagination Logic Extras ---
+    filteredMilitares.sort(sortMilitares);
+    
+    const totalItems = filteredMilitares.length;
+    const totalPages = Math.ceil(totalItems / ITEMS_PER_PAGE) || 1;
+    if (currentPageExtras > totalPages) currentPageExtras = totalPages;
+    if (currentPageExtras < 1) currentPageExtras = 1;
+
+    const startIndex = (currentPageExtras - 1) * ITEMS_PER_PAGE;
+    const endIndex = startIndex + ITEMS_PER_PAGE;
+    const paginatedMilitares = filteredMilitares.slice(startIndex, endIndex);
+
+    // Update UI Controls
+    const pageInfo = document.getElementById('pageInfoExtras');
+    if(pageInfo) pageInfo.textContent = `Página ${currentPageExtras} de ${totalPages}`;
+
+    const btnPrev = document.querySelector('#paginationExtras button:first-child');
+    const btnNext = document.querySelector('#paginationExtras button:last-child');
+    if(btnPrev) btnPrev.disabled = currentPageExtras === 1;
+    if(btnNext) btnNext.disabled = currentPageExtras === totalPages;
+
     // Body Generation
     let body = "";
     const extrasDb = db.horasExtras || {};
-    filteredMilitares.sort(sortMilitares).forEach((m, index) => {
+    paginatedMilitares.forEach((m, index) => {
         let totalExtras = 0;
         
         // Setup row data cells string
