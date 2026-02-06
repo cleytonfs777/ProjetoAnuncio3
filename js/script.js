@@ -11,13 +11,16 @@ const DEFAULT_DB = {
     ],
     escala: {},
     horasExtras: {},
-    cargasDiarias: {}
+    cargasDiarias: {},
+    avisos: {}
 };
 
 // Pagination State
 let currentPageEscala = 1;
 let currentPageExtras = 1;
+let currentPageConfigMilitares = 1;
 const ITEMS_PER_PAGE = 20;
+const ITEMS_PER_PAGE_CONFIG = 12;
 
 const meses = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
 const API_URL = 'http://localhost:3000/api';
@@ -40,6 +43,11 @@ const renderEscalaDebounced = debounce(() => {
 const renderHorasExtrasDebounced = debounce(() => {
     currentPageExtras = 1; // Reset to first page on search
     renderHorasExtras();
+});
+
+const renderMilitaresConfigDebounced = debounce(() => {
+    currentPageConfigMilitares = 1; // Reset to first page on search
+    renderMilitaresConfig();
 });
 
 // Document Ready
@@ -226,6 +234,7 @@ async function loadData() {
             if(!db.escala) db.escala = {};
             if(!db.horasExtras) db.horasExtras = {};
             if(!db.cargasDiarias) db.cargasDiarias = {};
+            if(!db.avisos) db.avisos = {};
 
             // Ensure PM/PT exist and update colors
             let pm = db.legendas.find(l => l.sigla === 'PM');
@@ -266,6 +275,11 @@ async function loadData() {
 function setupEventListeners() {
     const fileInputCSV = document.getElementById('fileInputCSV');
     if(fileInputCSV) fileInputCSV.addEventListener('change', importCSV);
+
+    const searchMilitaresConfig = document.getElementById('searchMilitaresConfig');
+    if (searchMilitaresConfig) {
+        searchMilitaresConfig.addEventListener('input', renderMilitaresConfigDebounced);
+    }
 
     // Auto-set workload to 8h if Posto is 'Civil'
     const inputPosto = document.getElementById('inputPosto');
@@ -530,6 +544,11 @@ function changePageExtras(delta) {
     renderHorasExtras();
 }
 
+function changePageMilitaresConfig(delta) {
+    currentPageConfigMilitares += delta;
+    renderMilitaresConfig();
+}
+
 // ------ ESCALA RENDERER ------
 
 function renderEscala() {
@@ -565,6 +584,9 @@ function renderEscala() {
         </th>`;
     }
     document.getElementById('headEscala').innerHTML = head + `</tr>`;
+    
+    // Render Avisos whenever Escala updates (since it depends on selected month)
+    renderAvisos();
 
     // Filter Logic
     const search = document.getElementById('searchInput') ? document.getElementById('searchInput').value.toLowerCase() : "";
@@ -913,9 +935,13 @@ function openHoraExtraModal(key) {
     const entry = db.horasExtras[key];
     const val = (typeof entry === 'object' && entry !== null) ? (parseFloat(entry.val) || 0) : (parseFloat(entry) || 0);
     const obs = (typeof entry === 'object' && entry !== null && entry.obs) ? entry.obs : "";
+    const resp = (typeof entry === 'object' && entry !== null && entry.responsible) ? entry.responsible : "";
 
     document.getElementById('inputHoraExtraVal').value = val === 0 ? "" : val;
     document.getElementById('inputHoraExtraObs').value = obs;
+    
+    const respInput = document.getElementById('inputHoraExtraResp');
+    if (respInput) respInput.value = resp;
 
     document.getElementById('modalHoraExtra').classList.add('active');
     setTimeout(() => document.getElementById('inputHoraExtraVal').focus(), 100);
@@ -942,9 +968,20 @@ function saveHoraExtraModal() {
     if(isValZero && !obs) {
         delete db.horasExtras[currentHoraExtraKey];
     } else {
+        let responsible = "";
+        if (currentUser) {
+             const m = db.militares.find(mil => mil.num.replace(/\D/g, '') === currentUser.username);
+             if (m) {
+                 responsible = `${m.num} ${m.posto || ''} ${m.nome}`;
+             } else {
+                 responsible = currentUser.username;
+             }
+        }
+
         db.horasExtras[currentHoraExtraKey] = {
             val: isNaN(val) ? 0 : val,
-            obs: obs
+            obs: obs,
+            responsible: responsible
         };
     }
     
@@ -1066,7 +1103,50 @@ function renderMilitaresConfig() {
     const list = document.getElementById('listMilitares');
     if(!list) return;
     
-    list.innerHTML = db.militares.map((m, i) => `
+    const searchInput = document.getElementById('searchMilitaresConfig');
+    const search = searchInput ? searchInput.value.toLowerCase().trim() : '';
+
+    const filteredMilitares = db.militares.filter(m => {
+        if (!search) return true;
+        const nome = (m.nome || '').toLowerCase();
+        const num = (m.num || '').toLowerCase();
+        const secao = (m.secao || '').toLowerCase();
+        const posto = (m.posto || '').toLowerCase();
+        const typeHora = (m.typeHora || '').toLowerCase();
+        return nome.includes(search) || num.includes(search) || secao.includes(search) || posto.includes(search) || typeHora.includes(search);
+    });
+
+    filteredMilitares.sort(sortMilitares);
+
+    const totalItems = filteredMilitares.length;
+    const totalPages = Math.ceil(totalItems / ITEMS_PER_PAGE_CONFIG) || 1;
+    if (currentPageConfigMilitares > totalPages) currentPageConfigMilitares = totalPages;
+    if (currentPageConfigMilitares < 1) currentPageConfigMilitares = 1;
+    const startIndex = (currentPageConfigMilitares - 1) * ITEMS_PER_PAGE_CONFIG;
+    const endIndex = startIndex + ITEMS_PER_PAGE_CONFIG;
+    const paginatedMilitares = filteredMilitares.slice(startIndex, endIndex);
+
+    const pageInfo = document.getElementById('pageInfoMilitaresConfig');
+    if (pageInfo) pageInfo.textContent = `Página ${currentPageConfigMilitares} de ${totalPages}`;
+
+    const btnPrev = document.querySelector('#paginationMilitaresConfig button:first-child');
+    const btnNext = document.querySelector('#paginationMilitaresConfig button:last-child');
+    if (btnPrev) btnPrev.disabled = currentPageConfigMilitares === 1;
+    if (btnNext) btnNext.disabled = currentPageConfigMilitares === totalPages;
+
+    const countLabel = document.getElementById('militaresConfigCount');
+    if (countLabel) countLabel.textContent = `${totalItems} militar${totalItems !== 1 ? 'es' : ''}`;
+
+    if (totalItems === 0) {
+        list.innerHTML = `
+            <div class="p-6 text-center text-sm text-slate-500 border border-dashed rounded-xl bg-slate-50">
+                Nenhum militar encontrado.
+            </div>
+        `;
+        return;
+    }
+
+    list.innerHTML = paginatedMilitares.map((m, i) => `
         <div class="p-4 border rounded-xl bg-white shadow-sm flex items-center gap-4 hover:shadow-md transition">
             <div class="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center font-bold text-slate-500 text-xs text-center">
                 ${m.posto || m.secao.substring(0,2)}
@@ -1076,10 +1156,10 @@ function renderMilitaresConfig() {
                 <div class="text-xs text-slate-400 font-mono">${m.num} · ${m.secao} · ${m.typeHora || "6h"}</div>
             </div>
             <div class="flex gap-2">
-                <button onclick="openModalMilitar(${i})" class="w-8 h-8 rounded-full bg-indigo-50 text-indigo-600 hover:bg-indigo-100 flex items-center justify-center transition">
+                <button onclick="openModalMilitar(${db.militares.indexOf(m)})" class="w-8 h-8 rounded-full bg-indigo-50 text-indigo-600 hover:bg-indigo-100 flex items-center justify-center transition">
                     <i class="fas fa-edit text-xs"></i>
                 </button>
-                <button onclick="removeMilitar(${i})" class="w-8 h-8 rounded-full bg-red-50 text-red-500 hover:bg-red-100 flex items-center justify-center transition">
+                <button onclick="removeMilitar(${db.militares.indexOf(m)})" class="w-8 h-8 rounded-full bg-red-50 text-red-500 hover:bg-red-100 flex items-center justify-center transition">
                     <i class="fas fa-trash text-xs"></i>
                 </button>
             </div>
@@ -1948,5 +2028,142 @@ function toggleSidebar() {
         sidebar.classList.add('-translate-x-full');
         sidebar.classList.remove('translate-x-0');
         overlay.classList.add('hidden');
+    }
+}
+
+// ------ AVISOS / OBSERVAÇÕES ------
+let currentEditAvisoId = null;
+
+function renderAvisos() {
+    const list = document.getElementById('listaAvisos');
+    if(!list) return;
+
+    if(!db.avisos) db.avisos = {};
+
+    const monthIdx = document.getElementById('selMes').value;
+    const year = 2026;
+    const key = `${monthIdx}-${year}`;
+    
+    // items is array of { id, text, createdAt, author, ... }
+    const items = db.avisos[key] || [];
+
+    if(items.length === 0) {
+        list.innerHTML = `<div class="col-span-full text-xs text-slate-400 italic p-4 text-center border rounded-lg bg-slate-50">Nenhum aviso ou observação para este mês.</div>`;
+        return;
+    }
+
+    list.innerHTML = items.map((aviso, idx) => `
+        <div class="p-4 border border-blue-100 bg-blue-50/50 rounded-xl flex justify-between items-start gap-3 hover:bg-blue-50 transition group">
+            <div class="flex-1">
+                <div class="text-xs font-bold text-blue-700 mb-1 flex items-center gap-2">
+                    <i class="fas fa-user-circle"></i> ${aviso.author || 'Sistema'}
+                    <span class="text-blue-400 font-normal">em ${aviso.dateDisplay || ''}</span>
+                </div>
+                <div class="text-sm text-slate-700 whitespace-pre-wrap">${aviso.text}</div>
+            </div>
+            <div class="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                <button onclick="openModalAviso('${aviso.id}')" class="w-7 h-7 flex items-center justify-center rounded text-blue-600 hover:bg-blue-200" title="Editar">
+                    <i class="fas fa-edit text-xs"></i>
+                </button>
+                <button onclick="deleteAviso('${aviso.id}')" class="w-7 h-7 flex items-center justify-center rounded text-red-500 hover:bg-red-200" title="Excluir">
+                    <i class="fas fa-trash text-xs"></i>
+                </button>
+            </div>
+        </div>
+    `).join('');
+}
+
+function openModalAviso(id = null) {
+    const modal = document.getElementById('modalAviso');
+    const title = document.getElementById('modalTitleAviso');
+    const txtArea = document.getElementById('inputAvisoTexto');
+    
+    currentEditAvisoId = id;
+
+    if(id) {
+        title.innerText = "Editar Aviso";
+        const monthIdx = document.getElementById('selMes').value;
+        const key = `${monthIdx}-2026`;
+        const items = db.avisos[key] || [];
+        const item = items.find(i => i.id === id);
+        if(item) {
+            txtArea.value = item.text;
+        }
+    } else {
+        title.innerText = "Novo Aviso";
+        txtArea.value = "";
+    }
+    
+    modal.classList.add('active');
+    setTimeout(() => txtArea.focus(), 100);
+}
+
+function closeModalAviso() {
+    document.getElementById('modalAviso').classList.remove('active');
+    currentEditAvisoId = null;
+}
+
+function saveAviso() {
+    const txt = document.getElementById('inputAvisoTexto').value.trim();
+    if(!txt) {
+        alert("O aviso não pode ser vazio.");
+        return;
+    }
+
+    const monthIdx = document.getElementById('selMes').value;
+    const key = `${monthIdx}-2026`;
+    
+    if(!db.avisos[key]) db.avisos[key] = [];
+
+    const now = new Date();
+    const dateDisplay = now.toLocaleDateString('pt-BR') + ' às ' + now.toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'});
+    
+    let author = "Anônimo";
+    if(currentUser) {
+        // Try to get Name + Rank
+        const m = db.militares.find(mil => mil.num.replace(/\D/g, '') === currentUser.username);
+        if(m) {
+            author = `${m.posto || ''} ${m.nome}`;
+        } else {
+            author = currentUser.username;
+        }
+    }
+
+    if(currentEditAvisoId) {
+        // Edit
+        const item = db.avisos[key].find(i => i.id === currentEditAvisoId);
+        if(item) {
+            item.text = txt;
+            // Optionally update author/date on edit? Let's update dateDisplay to show last edited.
+            item.dateDisplay = dateDisplay + ' (editado)';
+            item.author = author; 
+        }
+    } else {
+        // Create
+        const newId = 'aviso_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+        db.avisos[key].push({
+            id: newId,
+            text: txt,
+            author: author,
+            dateDisplay: dateDisplay,
+            createdAt: now.toISOString()
+        });
+    }
+
+    save();
+    renderAvisos();
+    closeModalAviso();
+}
+
+function deleteAviso(id) {
+    if(!confirm("Tem certeza que deseja excluir este aviso?")) return;
+    
+    const monthIdx = document.getElementById('selMes').value;
+    const key = `${monthIdx}-2026`;
+    
+    if(db.avisos[key]) {
+        db.avisos[key] = db.avisos[key].filter(i => i.id !== id);
+        save();
+        renderAvisos();
     }
 }

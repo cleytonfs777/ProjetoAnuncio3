@@ -285,6 +285,26 @@
 
         </div>
 
+        <!-- Modal Aviso -->
+        <div id="modalAviso" class="modal-overlay px-4">
+            <div class="modal-content">
+                <div class="p-6 border-b flex justify-between items-center bg-blue-50 rounded-t-xl">
+                    <h3 class="font-bold text-lg text-blue-900" id="modalTitleAviso">Novo Aviso</h3>
+                    <button onclick="closeModalAviso()" class="text-blue-400 hover:text-blue-600"><i class="fas fa-times"></i></button>
+                </div>
+                <div class="p-6 space-y-4">
+                    <div>
+                        <label class="block text-xs font-bold text-slate-500 mb-1 uppercase">Texto do Aviso</label>
+                        <textarea id="inputAvisoTexto" class="w-full border rounded-lg p-3 focus:ring-2 focus:ring-blue-500 outline-none text-sm" rows="4" placeholder="Digite o aviso ou observação..."></textarea>
+                    </div>
+                </div>
+                <div class="p-6 border-t bg-slate-50 rounded-b-xl flex justify-end gap-3">
+                    <button onclick="closeModalAviso()" class="px-4 py-2 text-slate-600 font-bold hover:bg-slate-200 rounded-lg transition">Cancelar</button>
+                    <button onclick="saveAviso()" class="px-6 py-2 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 shadow-lg transition transform active:scale-95">Salvar Aviso</button>
+                </div>
+            </div>
+        </div>
+
         <!-- Modal Usuario -->
         <div id="modalUsuario" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[70] hidden flex items-center justify-center opacity-0 transition-opacity duration-300">
             <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg transform scale-95 transition-transform duration-300 flex flex-col max-h-[90vh]">
@@ -439,6 +459,23 @@
                         <button onclick="changePageEscala(-1)" class="px-3 py-1 bg-white border rounded shadow hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed">Anterior</button>
                         <button onclick="changePageEscala(1)" class="px-3 py-1 bg-white border rounded shadow hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed">Próxima</button>
                     </div>
+                </div>
+            </div>
+
+            <!-- Avisos Section -->
+            <div class="mt-4 bg-white rounded-xl shadow border border-slate-200 p-4">
+                <div class="flex justify-between items-center mb-3">
+                    <h3 class="font-bold text-slate-700 flex items-center gap-2">
+                        <i class="fas fa-bullhorn text-blue-500"></i>
+                        Avisos / Observações do Mês
+                    </h3>
+                    <button onclick="openModalAviso()" class="text-xs bg-blue-50 text-blue-600 px-3 py-1 rounded-full font-bold hover:bg-blue-100 transition">
+                        + Novo Aviso
+                    </button>
+                </div>
+                <div id="listaAvisos" class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <!-- Populated by JS -->
+                    <div class="text-xs text-slate-400 italic p-2">Nenhum aviso para este mês.</div>
                 </div>
             </div>
         </section>
@@ -632,8 +669,22 @@
                             + Adicionar Militar
                         </button>
                     </div>
+                    <div class="flex flex-col md:flex-row gap-4 mb-4">
+                        <div class="relative flex-1">
+                            <i class="fas fa-search absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"></i>
+                            <input type="text" id="searchMilitaresConfig" placeholder="Pesquisar militar, matrícula, posto ou seção..." class="w-full pl-10 pr-4 py-2 rounded-lg border border-slate-200 focus:ring-2 focus:ring-blue-500 outline-none text-sm">
+                        </div>
+                        <div class="text-xs text-slate-500 font-bold flex items-center justify-end" id="militaresConfigCount">0 militares</div>
+                    </div>
                     <div class="grid grid-cols-1 gap-3" id="listMilitares">
                         <!-- Populated by JS -->
+                    </div>
+                    <div id="paginationMilitaresConfig" class="mt-4 p-3 border-t bg-slate-50 rounded-lg flex items-center justify-between text-xs font-bold text-slate-600">
+                        <span id="pageInfoMilitaresConfig">Página 1 de 1</span>
+                        <div class="flex gap-2">
+                            <button onclick="changePageMilitaresConfig(-1)" class="px-3 py-1 bg-white border rounded shadow hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed">Anterior</button>
+                            <button onclick="changePageMilitaresConfig(1)" class="px-3 py-1 bg-white border rounded shadow hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed">Próxima</button>
+                        </div>
                     </div>
                 </div>
                 
@@ -656,6 +707,10 @@
                 <div>
                     <label class="block text-xs font-bold text-slate-500 mb-1">Observação / Justificativa</label>
                     <textarea id="inputHoraExtraObs" class="w-full border rounded-lg p-3 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" rows="3" placeholder="Digite o motivo aqui..."></textarea>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 mb-1">Responsável pelo Preenchimento</label>
+                    <input type="text" id="inputHoraExtraResp" disabled class="w-full border rounded-lg p-3 text-xs font-mono bg-slate-100 text-slate-500" placeholder="Registrado automaticamente ao salvar">
                 </div>
                 <div class="pt-2 flex justify-end gap-3">
                     <button onclick="closeModalHoraExtra()" class="px-5 py-2.5 rounded-lg text-slate-600 font-bold text-sm hover:bg-slate-100 transition">Cancelar</button>
