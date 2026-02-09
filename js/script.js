@@ -81,6 +81,21 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 // ------ AUTHENTICATION ------
 
+function toggleLoginPassword() {
+    const passInput = document.getElementById('loginPass');
+    const icon = document.getElementById('iconLoginPass');
+    
+    if (passInput.type === 'password') {
+        passInput.type = 'text';
+        icon.classList.remove('fa-eye');
+        icon.classList.add('fa-eye-slash');
+    } else {
+        passInput.type = 'password';
+        icon.classList.remove('fa-eye-slash');
+        icon.classList.add('fa-eye');
+    }
+}
+
 async function handleLogin(e) {
     e.preventDefault();
     // Strip non-digits from username to ensure standard login format
