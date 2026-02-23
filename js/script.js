@@ -23,7 +23,7 @@ const ITEMS_PER_PAGE = 20;
 const ITEMS_PER_PAGE_CONFIG = 12;
 
 const meses = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
-const API_URL = 'http://localhost:3000/api';
+const API_URL = '/api';
 let currentUser = null;
 
 // Utility: Debounce to prevent lag on rapid input
@@ -254,21 +254,23 @@ async function loadData() {
             // Ensure PM/PT exist and update colors
             let pm = db.legendas.find(l => l.sigla === 'PM');
             if (!pm) {
-                db.legendas.push({ sigla: "PM", desc: "Presente Manhã", color: "#fef9c3", text: "#854d0e", horas: 6.0 });
+                db.legendas.push({ sigla: "PM", nome: "Presente Manhã", desc: "Presente Manhã", color: "#fef9c3", text: "#854d0e", horas: 6.0 });
             } else {
                 pm.color = "#fef9c3"; pm.text = "#854d0e"; pm.desc = "Presente Manhã";
+                if (!pm.nome) pm.nome = "Presente Manhã";
             }
 
             let pt = db.legendas.find(l => l.sigla === 'PT');
             if (!pt) {
-                db.legendas.push({ sigla: "PT", desc: "Presente Tarde", color: "#e0f2fe", text: "#0369a1", horas: 6.0 });
+                db.legendas.push({ sigla: "PT", nome: "Presente Tarde", desc: "Presente Tarde", color: "#e0f2fe", text: "#0369a1", horas: 6.0 });
             } else {
                 pt.color = "#e0f2fe"; pt.text = "#0369a1"; pt.desc = "Presente Tarde";
+                if (!pt.nome) pt.nome = "Presente Tarde";
             }
             
             // Fix 'P' name if needed
             let p = db.legendas.find(l => l.sigla === 'P');
-            if(p) p.desc = "Presente";
+            if(p) { p.desc = "Presente"; if (!p.nome) p.nome = "Presente"; }
 
         } else {
             console.error("Failed to load from API");
@@ -2067,15 +2069,14 @@ function renderAvisos() {
         return;
     }
 
-    list.innerHTML = items.map((aviso, idx) => `
-        <div class="p-4 border border-blue-100 bg-blue-50/50 rounded-xl flex justify-between items-start gap-3 hover:bg-blue-50 transition group">
-            <div class="flex-1">
-                <div class="text-xs font-bold text-blue-700 mb-1 flex items-center gap-2">
-                    <i class="fas fa-user-circle"></i> ${aviso.author || 'Sistema'}
-                    <span class="text-blue-400 font-normal">em ${aviso.dateDisplay || ''}</span>
-                </div>
-                <div class="text-sm text-slate-700 whitespace-pre-wrap">${aviso.text}</div>
-            </div>
+    list.innerHTML = items.map((aviso, idx) => {
+        // Check if current user can edit/delete this aviso
+        const canModify = currentUser && (
+            currentUser.role === 'ADMIN' || 
+            aviso.authorUsername === currentUser.username
+        );
+        
+        const actionButtons = canModify ? `
             <div class="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                 <button onclick="openModalAviso('${aviso.id}')" class="w-7 h-7 flex items-center justify-center rounded text-blue-600 hover:bg-blue-200" title="Editar">
                     <i class="fas fa-edit text-xs"></i>
@@ -2084,8 +2085,21 @@ function renderAvisos() {
                     <i class="fas fa-trash text-xs"></i>
                 </button>
             </div>
+        ` : '';
+        
+        return `
+        <div class="p-4 border border-blue-100 bg-blue-50/50 rounded-xl flex justify-between items-start gap-3 hover:bg-blue-50 transition group">
+            <div class="flex-1">
+                <div class="text-xs font-bold text-blue-700 mb-1 flex items-center gap-2">
+                    <i class="fas fa-user-circle"></i> ${aviso.author || 'Sistema'}
+                    <span class="text-blue-400 font-normal">em ${aviso.dateDisplay || ''}</span>
+                </div>
+                <div class="text-sm text-slate-700 whitespace-pre-wrap">${aviso.text}</div>
+            </div>
+            ${actionButtons}
         </div>
-    `).join('');
+    `;
+    }).join('');
 }
 
 function openModalAviso(id = null) {
@@ -2102,6 +2116,15 @@ function openModalAviso(id = null) {
         const items = db.avisos[key] || [];
         const item = items.find(i => i.id === id);
         if(item) {
+            // Verify ownership before allowing edit
+            const canModify = currentUser && (
+                currentUser.role === 'ADMIN' || 
+                item.authorUsername === currentUser.username
+            );
+            if(!canModify) {
+                alert("Você não tem permissão para editar este aviso.");
+                return;
+            }
             txtArea.value = item.text;
         }
     } else {
@@ -2148,10 +2171,20 @@ function saveAviso() {
         // Edit
         const item = db.avisos[key].find(i => i.id === currentEditAvisoId);
         if(item) {
+            // Verify ownership before saving edit
+            const canModify = currentUser && (
+                currentUser.role === 'ADMIN' || 
+                item.authorUsername === currentUser.username
+            );
+            if(!canModify) {
+                alert("Você não tem permissão para editar este aviso.");
+                closeModalAviso();
+                return;
+            }
             item.text = txt;
             // Optionally update author/date on edit? Let's update dateDisplay to show last edited.
             item.dateDisplay = dateDisplay + ' (editado)';
-            item.author = author; 
+            // Keep original author, don't change it
         }
     } else {
         // Create
@@ -2160,6 +2193,7 @@ function saveAviso() {
             id: newId,
             text: txt,
             author: author,
+            authorUsername: currentUser ? currentUser.username : null,
             dateDisplay: dateDisplay,
             createdAt: now.toISOString()
         });
@@ -2171,12 +2205,25 @@ function saveAviso() {
 }
 
 function deleteAviso(id) {
-    if(!confirm("Tem certeza que deseja excluir este aviso?")) return;
-    
     const monthIdx = document.getElementById('selMes').value;
     const key = `${monthIdx}-2026`;
     
     if(db.avisos[key]) {
+        const item = db.avisos[key].find(i => i.id === id);
+        if(item) {
+            // Verify ownership before deleting
+            const canModify = currentUser && (
+                currentUser.role === 'ADMIN' || 
+                item.authorUsername === currentUser.username
+            );
+            if(!canModify) {
+                alert("Você não tem permissão para excluir este aviso.");
+                return;
+            }
+        }
+        
+        if(!confirm("Tem certeza que deseja excluir este aviso?")) return;
+        
         db.avisos[key] = db.avisos[key].filter(i => i.id !== id);
         save();
         renderAvisos();

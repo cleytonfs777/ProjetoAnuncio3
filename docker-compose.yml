@@ -1,12 +1,35 @@
 services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: bmtrack-db
+    environment:
+      POSTGRES_USER: bmtrack
+      POSTGRES_PASSWORD: bmtrack123
+      POSTGRES_DB: bmtrack
+    command: postgres -c max_connections=200
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: always
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bmtrack"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
   bmtrack:
     container_name: bmtrack-server
     build: .
     ports:
       - "3000:3000"
+    environment:
+      DATABASE_URL: postgres://bmtrack:bmtrack123@postgres:5432/bmtrack
     volumes:
-      # Monta o diretório atual para persistência do SQLite e arquivos
       - ./:/usr/src/app
-      # Previne que o node_modules local sobrescreva o do container
       - /usr/src/app/node_modules
+    depends_on:
+      postgres:
+        condition: service_healthy
     restart: always
+
+volumes:
+  postgres_data:
